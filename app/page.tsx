@@ -1,7 +1,7 @@
 import { ShowCalendar } from '@/components/calendar/show-calendar'
 import { PasscodeGate } from '@/components/passcode-gate'
 import { isSupabaseConfigured } from '@/lib/supabase-admin'
-import { hasTeamAccess } from '@/lib/team-access'
+import { PASSCODE_ENABLED, hasTeamAccess } from '@/lib/team-access'
 
 function todayInLosAngeles() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -15,7 +15,7 @@ function todayInLosAngeles() {
 export default async function Page() {
   const mode = isSupabaseConfigured() ? 'remote' : 'local'
 
-  if (mode === 'remote') {
+  if (mode === 'remote' && PASSCODE_ENABLED) {
     if (!process.env.TEAM_PASSCODE) {
       return (
         <main className="flex min-h-dvh items-center justify-center px-4">
