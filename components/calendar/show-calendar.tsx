@@ -9,12 +9,15 @@ import { CalendarHeader, Legend } from './calendar-header'
 import { MonthGrid } from './month-grid'
 import { ShowDialog } from './show-dialog'
 import { SummaryBar } from './summary-bar'
+import { TableView } from './table-view'
 
 type Editor = { show?: Show; date: string; key: number }
+type View = 'calendar' | 'table'
 
 export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: string }) {
   const thisMonth = todayISO.slice(0, 7)
   const [ym, setYm] = useState(thisMonth)
+  const [view, setView] = useState<View>('calendar')
   const [editor, setEditor] = useState<Editor | null>(null)
   const source = useMemo(() => (mode === 'remote' ? remoteSource : createLocalSource(thisMonth)), [mode, thisMonth])
 
@@ -59,18 +62,24 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         onPrev={() => setYm((m) => addMonths(m, -1))}
         onNext={() => setYm((m) => addMonths(m, 1))}
         onAdd={() => openAdd(ym === thisMonth ? todayISO : `${ym}-01`)}
+        view={view}
+        onViewChange={setView}
       />
 
       <SummaryBar shows={shows} target={target} onSaveTarget={handleSaveTarget} />
 
       <div className="flex flex-col gap-4">
-        <Legend syncing={isValidating} />
+        {view === 'calendar' && <Legend syncing={isValidating} />}
         {error && (
           <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error instanceof Error ? error.message : 'Could not load shows.'}
           </p>
         )}
-        <MonthGrid ym={ym} todayISO={todayISO} shows={shows} onAdd={openAdd} onOpen={openEdit} />
+        {view === 'calendar' ? (
+          <MonthGrid ym={ym} todayISO={todayISO} shows={shows} onAdd={openAdd} onOpen={openEdit} />
+        ) : (
+          <TableView ym={ym} shows={shows} onOpen={openEdit} />
+        )}
       </div>
 
       {editor && (

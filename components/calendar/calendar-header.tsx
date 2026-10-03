@@ -3,18 +3,22 @@ import { monthTitle } from '@/lib/dates'
 import { CATEGORIES } from '@/lib/shows'
 import { CATEGORY_STYLES } from './category-styles'
 
+type View = 'calendar' | 'table'
+
 type HeaderProps = {
   ym: string
   onToday: () => void
   onPrev: () => void
   onNext: () => void
   onAdd: () => void
+  view: View
+  onViewChange: (view: View) => void
 }
 
 const outlineBtn =
   'inline-flex h-11 items-center justify-center border border-neutral-200 bg-white text-sm font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900'
 
-export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd }: HeaderProps) {
+export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, view, onViewChange }: HeaderProps) {
   const { month, year } = monthTitle(ym)
   return (
     <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -27,6 +31,25 @@ export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd }: HeaderPro
         </h1>
       </div>
       <div className="flex items-center gap-2.5">
+        <div
+          role="group"
+          aria-label="Calendar view"
+          className="flex rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium"
+        >
+          {(['calendar', 'table'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onViewChange(v)}
+              aria-pressed={view === v}
+              className={`rounded-[0.6rem] px-3.5 py-2 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 ${
+                view === v ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={onToday} className={`${outlineBtn} rounded-xl px-4`}>
           Today
         </button>
