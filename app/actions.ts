@@ -30,10 +30,21 @@ type ShowRow = {
   notes: string | null
 }
 
-const SHOW_COLUMNS =
-  'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, region, organized_by, portal_event_id, notes'
+const BASE_SHOW_COLUMNS =
+  'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, portal_event_id, notes'
+const SHOW_COLUMNS = `${BASE_SHOW_COLUMNS}, region, organized_by`
 
 const toNum = (v: number | string | null) => (v == null ? null : Number(v))
+
+// The region/organized_by columns are added by scripts/002_add_region_organized_by.sql.
+// Until that migration runs, fall back to the base column set so the app keeps working
+// and simply defaults those two fields instead of erroring.
+function isMissingNewColumns(error: { code?: string; message?: string } | null) {
+  if (!error) return false
+  if (error.code === '42703') return true
+  const msg = error.message ?? ''
+  return msg.includes('region') || msg.includes('organized_by')
+}
 
 function fromRow(row: ShowRow): Show {
   return {
@@ -47,8 +58,8 @@ function fromRow(row: ShowRow): Show {
     ticketPrice: toNum(row.ticket_price),
     projectedRevenue: toNum(row.projected_revenue),
     status: row.status,
-    region: row.region,
-    organizedBy: row.organized_by,
+    region: row.region ?? 'LA',
+    organizedBy: row.organized_by ?? 'Sofar',
     portalEventId: row.portal_event_id ?? '',
     notes: row.notes ?? '',
   }
@@ -88,7 +99,7 @@ export async function getMonthData(ym: string): Promise<MonthData> {
   const { start, end } = monthBounds(ym)
   const supabase = getSupabaseAdmin()
 
-  const [showsRes, targetRes] = await Promise.all([
+  let [showsRes, targetRes] = await Promise.all([
     supabase
       .from('shows')
       .select(SHOW_COLUMNS)
@@ -98,6 +109,15 @@ export async function getMonthData(ym: string): Promise<MonthData> {
       .order('created_at'),
     supabase.from('monthly_targets').select('target').eq('month', start).maybeSingle(),
   ])
+  if (showsRes.error && isMissingNewColumns(showsRes.error)) {
+    showsRes = await supabase
+      .from('shows')
+      .select(BASE_SHOW_COLUMNS)
+      .gte('show_date', start)
+      .lt('show_date', end)
+      .order('show_date')
+      .order('created_at')
+  }
   if (showsRes.error) throw new Error(showsRes.error.message)
   if (targetRes.error) throw new Error(targetRes.error.message)
 
@@ -126,10 +146,18 @@ export async function saveShow(raw: unknown): Promise<Show> {
     notes: input.notes || null,
   }
   const supabase = getSupabaseAdmin()
-  const query = input.id
-    ? supabase.from('shows').update({ ...row, updated_at: new Date().toISOString() }).eq('id', input.id)
-    : supabase.from('shows').insert(row)
-  const { data, error } = await query.select(SHOW_COLUMNS).single()
+  const runSave = (payload: Record<string, unknown>, columns: string) => {
+    const query = input.id
+      ? supabase.from('shows').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', input.id)
+      : supabase.from('shows').insert(payload)
+    return query.select(columns).single()
+  }
+
+  let { data, error } = await runSave(row, SHOW_COLUMNS)
+  if (error && isMissingNewColumns(error)) {
+    const { region, organized_by, ...baseRow } = row
+    ;({ data, error } = await runSave(baseRow, BASE_SHOW_COLUMNS))
+  }
   if (error) throw new Error(error.message)
   return fromRow(data as ShowRow)
 }
