@@ -58,6 +58,8 @@ function seedState(ym: string): LocalState {
       ticketPrice,
       projectedRevenue,
       status,
+      region: 'LA',
+      organizedBy: 'Sofar',
       portalEventId: '',
       notes: '',
     })),

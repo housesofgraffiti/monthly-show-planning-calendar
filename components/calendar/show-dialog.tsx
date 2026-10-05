@@ -8,8 +8,12 @@ import {
   CATEGORIES,
   DEFAULT_TICKET_PRICES,
   FORMATS,
+  ORGANIZERS,
+  REGIONS,
   STATUSES,
   type Category,
+  type Organizer,
+  type Region,
   type Show,
   type ShowInput,
   type Status,
@@ -99,6 +103,8 @@ export function ShowDialog({ show, date: initialDate, onClose, onSave, onDelete 
   const [format, setFormat] = useState(show?.format ?? FORMATS.Core[0])
   const [date, setDate] = useState(show?.date ?? initialDate)
   const [status, setStatus] = useState<Status>(show?.status ?? 'Idea')
+  const [region, setRegion] = useState<Region>(show?.region ?? 'LA')
+  const [organizedBy, setOrganizedBy] = useState<Organizer>(show?.organizedBy ?? 'Sofar')
   const [area, setArea] = useState(show?.area ?? '')
   const [venue, setVenue] = useState(show?.venue ?? '')
   const [tickets, setTickets] = useState(numStr(show?.tickets))
@@ -145,6 +151,8 @@ export function ShowDialog({ show, date: initialDate, onClose, onSave, onDelete 
         category,
         format,
         status,
+        region,
+        organizedBy,
         area,
         venue,
         tickets: t,
@@ -241,6 +249,17 @@ export function ShowDialog({ show, date: initialDate, onClose, onSave, onDelete 
             </Field>
             <Field label="Status" htmlFor={f('status')}>
               <Select id={f('status')} value={status} onChange={(v) => setStatus(v as Status)} options={STATUSES} />
+            </Field>
+            <Field label="Region" htmlFor={f('region')}>
+              <Select id={f('region')} value={region} onChange={(v) => setRegion(v as Region)} options={REGIONS} />
+            </Field>
+            <Field label="Organized by" htmlFor={f('organizedBy')}>
+              <Select
+                id={f('organizedBy')}
+                value={organizedBy}
+                onChange={(v) => setOrganizedBy(v as Organizer)}
+                options={ORGANIZERS}
+              />
             </Field>
             <Field label="Area" htmlFor={f('area')}>
               <input id={f('area')} value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. Venice" maxLength={120} className={inputCls} />

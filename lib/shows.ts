@@ -4,6 +4,12 @@ export type Category = (typeof CATEGORIES)[number]
 export const STATUSES = ['Idea', 'Tentative', 'Confirmed', 'Cancelled'] as const
 export type Status = (typeof STATUSES)[number]
 
+export const REGIONS = ['LA', 'Long Beach', 'Orange County'] as const
+export type Region = (typeof REGIONS)[number]
+
+export const ORGANIZERS = ['Sofar', 'Local Producer'] as const
+export type Organizer = (typeof ORGANIZERS)[number]
+
 export const FORMATS: Record<Category, readonly string[]> = {
   Core: [
     'Discovery',
@@ -50,6 +56,8 @@ export type Show = {
   ticketPrice: number | null
   projectedRevenue: number | null
   status: Status
+  region: Region
+  organizedBy: Organizer
   portalEventId: string
   notes: string
 }
@@ -99,12 +107,20 @@ export function validateShowInput(raw: unknown): ShowInput {
   const status = r.status as Status
   if (!STATUSES.includes(status)) throw new Error('Pick a status')
 
+  const region = (r.region as Region) ?? 'LA'
+  if (!REGIONS.includes(region)) throw new Error('Pick a region')
+
+  const organizedBy = (r.organizedBy as Organizer) ?? 'Sofar'
+  if (!ORGANIZERS.includes(organizedBy)) throw new Error('Pick who organized this show')
+
   return {
     id: r.id === undefined ? undefined : isUuid(r.id) ? r.id : (() => { throw new Error('Invalid id') })(),
     date,
     category,
     format,
     status,
+    region,
+    organizedBy,
     area: cleanText(r.area, 120),
     venue: cleanText(r.venue, 160),
     tickets: cleanNumber(r.tickets, { integer: true, max: 100_000 }),

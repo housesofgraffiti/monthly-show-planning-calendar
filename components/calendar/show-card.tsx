@@ -22,9 +22,19 @@ export function ShowCard({ show, onOpen }: { show: Show; onOpen: (show: Show) =>
         cancelled && 'line-through opacity-45',
       )}
     >
-      <span className="block truncate text-sm font-medium leading-snug">{show.format}</span>
+      <span className="flex items-center gap-1.5">
+        <span className="block truncate text-sm font-medium leading-snug">{show.format}</span>
+        {show.organizedBy === 'Local Producer' && (
+          <span className="shrink-0 rounded-sm bg-neutral-900/10 px-1 text-[10px] font-semibold leading-tight text-neutral-700">
+            LP
+          </span>
+        )}
+      </span>
       <span className={cn('flex items-baseline justify-between gap-2 text-xs leading-snug', styles.sub)}>
-        <span className="truncate">{show.venue || show.area || '\u00A0'}</span>
+        <span className="truncate">
+          {show.venue || show.area || '\u00A0'}
+          {show.region !== 'LA' && <span className="text-[11px] opacity-75"> · {show.region}</span>}
+        </span>
         {show.projectedRevenue != null && show.projectedRevenue > 0 && (
           <span className="shrink-0 tabular-nums">{formatCompact(show.projectedRevenue)}</span>
         )}

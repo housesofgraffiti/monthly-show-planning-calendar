@@ -24,12 +24,14 @@ type ShowRow = {
   ticket_price: number | string | null
   projected_revenue: number | string | null
   status: Show['status']
+  region: Show['region']
+  organized_by: Show['organizedBy']
   portal_event_id: string | null
   notes: string | null
 }
 
 const SHOW_COLUMNS =
-  'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, portal_event_id, notes'
+  'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, region, organized_by, portal_event_id, notes'
 
 const toNum = (v: number | string | null) => (v == null ? null : Number(v))
 
@@ -45,6 +47,8 @@ function fromRow(row: ShowRow): Show {
     ticketPrice: toNum(row.ticket_price),
     projectedRevenue: toNum(row.projected_revenue),
     status: row.status,
+    region: row.region,
+    organizedBy: row.organized_by,
     portalEventId: row.portal_event_id ?? '',
     notes: row.notes ?? '',
   }
@@ -116,6 +120,8 @@ export async function saveShow(raw: unknown): Promise<Show> {
     ticket_price: input.ticketPrice,
     projected_revenue: input.projectedRevenue,
     status: input.status,
+    region: input.region,
+    organized_by: input.organizedBy,
     portal_event_id: input.portalEventId || null,
     notes: input.notes || null,
   }

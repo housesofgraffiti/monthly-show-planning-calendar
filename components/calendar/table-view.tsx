@@ -21,6 +21,8 @@ function exportCsv(ym: string, shows: Show[]) {
     'Day',
     'Category',
     'Format',
+    'Region',
+    'Organized By',
     'Area',
     'Venue',
     'Tickets',
@@ -33,6 +35,8 @@ function exportCsv(ym: string, shows: Show[]) {
     formatShortWeekday(s.date),
     s.category,
     s.format,
+    s.region,
+    s.organizedBy,
     s.area,
     s.venue,
     s.tickets ?? '',
@@ -74,13 +78,15 @@ export function TableView({ ym, shows, onOpen }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-200">
-        <table className="w-full min-w-[920px] border-collapse text-sm">
+        <table className="w-full min-w-[1120px] border-collapse text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50/60">
             <tr>
               <th className={th}>Date</th>
               <th className={th}>Day</th>
               <th className={th}>Category</th>
               <th className={th}>Format</th>
+              <th className={th}>Region</th>
+              <th className={th}>Organized By</th>
               <th className={th}>Area</th>
               <th className={th}>Venue</th>
               <th className={cn(th, 'text-right')}>Tickets</th>
@@ -92,7 +98,7 @@ export function TableView({ ym, shows, onOpen }: Props) {
           <tbody className="divide-y divide-neutral-100">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-10 text-center text-neutral-400">
+                <td colSpan={12} className="px-3 py-10 text-center text-neutral-400">
                   No shows this month.
                 </td>
               </tr>
@@ -123,6 +129,8 @@ export function TableView({ ym, shows, onOpen }: Props) {
                   <td className={cn(td, 'font-medium text-neutral-900', cancelled && 'font-normal text-neutral-400 line-through')}>
                     {show.format}
                   </td>
+                  <td className={cn(td, cancelled && 'line-through')}>{show.region}</td>
+                  <td className={cn(td, cancelled && 'line-through')}>{show.organizedBy}</td>
                   <td className={cn(td, cancelled && 'line-through')}>{show.area || '—'}</td>
                   <td className={cn(td, cancelled && 'line-through')}>{show.venue || '—'}</td>
                   <td className={cn(td, 'text-right tabular-nums', cancelled && 'line-through')}>
@@ -141,8 +149,8 @@ export function TableView({ ym, shows, onOpen }: Props) {
           </tbody>
           {sorted.length > 0 && (
             <tfoot className="border-t border-neutral-200 bg-neutral-50/60 font-medium text-neutral-900">
-              <tr>
-                <td className={td} colSpan={6}>
+            <tr>
+                <td className={td} colSpan={8}>
                   Total ({active.length} non-cancelled)
                 </td>
                 <td className={cn(td, 'text-right tabular-nums')}>{totalTickets}</td>
