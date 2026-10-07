@@ -2,10 +2,13 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { formatCurrency, summarize, type OtherRevenueInput, type OtherRevenueLine, type Show } from '@/lib/shows'
+import { formatCurrency, type OtherRevenueInput, type OtherRevenueLine, type Show } from '@/lib/shows'
 import type { PortalMap } from '@/lib/portal'
-import { revenueTotals } from '@/lib/revenue'
+import { planningSummary, type MixKey, type TypicalDiscovery } from '@/lib/planning'
+import { EXPECTED_VALUE_WEIGHTS } from '@/lib/planning-config'
+import { MixStrip } from './mix-strip'
 import { OtherRevenuePanel } from './other-revenue-panel'
+import { ProgressToTarget } from './progress-to-target'
 
 type Props = {
   ym: string
@@ -14,17 +17,38 @@ type Props = {
   otherRevenue: OtherRevenueLine[]
   portal?: PortalMap
   todayISO: string
+  typical: TypicalDiscovery | null
+  highlight: MixKey | null
+  onHighlight: (key: MixKey | null) => void
   onSaveTarget: (value: number) => Promise<void>
   onSaveOther: (input: OtherRevenueInput) => Promise<void>
   onDeleteOther: (id: string) => Promise<void>
   onCopyOther: () => Promise<{ copied: number; skipped: number }>
 }
 
-function Stat({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
+const percent = (n: number) => `${Math.round(n * 100)}%`
+
+function Stat({
+  label,
+  hint,
+  size,
+  children,
+}: {
+  label: string
+  hint: string
+  size: 'lg' | 'sm'
+  children: React.ReactNode
+}) {
+  const large = size === 'lg'
   return (
-    <div className="flex flex-col gap-1 bg-white px-5 py-5">
+    <div className={cn('flex flex-col gap-1 bg-white', large ? 'px-5 py-5' : 'px-5 py-3.5')}>
       <span className="text-sm text-neutral-500">{label}</span>
-      <div className="text-2xl font-semibold tracking-tight tabular-nums text-neutral-900 md:text-[1.75rem]">
+      <div
+        className={cn(
+          'font-semibold tracking-tight tabular-nums text-neutral-900',
+          large ? 'text-3xl md:text-4xl' : 'text-xl',
+        )}
+      >
         {children}
       </div>
       <span className="text-xs text-neutral-400">{hint}</span>
@@ -94,54 +118,68 @@ export function SummaryBar({
   otherRevenue,
   portal,
   todayISO,
+  typical,
+  highlight,
+  onHighlight,
   onSaveTarget,
   onSaveOther,
   onDeleteOther,
   onCopyOther,
 }: Props) {
-  const otherTotal = otherRevenue.reduce((sum, l) => sum + l.amount, 0)
-  const s = summarize(shows, target, otherTotal)
-  const variance = s.variance
-  const totals = revenueTotals(shows, portal, todayISO)
+  const other = otherRevenue.reduce((sum, l) => sum + l.amount, 0)
+  const s = planningSummary({ shows, portal, todayISO, other, target })
 
   return (
     <div className="flex flex-col gap-4">
-    <section
-      aria-label="Monthly summary"
-      className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 sm:grid-cols-4"
-    >
-      <Stat label="Monthly target" hint="Click to edit">
-        <TargetEditor key={target ?? 'none'} target={target} onSave={onSaveTarget} />
-      </Stat>
-      <Stat label="Planned" hint="All non-cancelled">
-        {formatCurrency(s.planned)}
-      </Stat>
-      <Stat label="Confirmed" hint="Confirmed only">
-        {formatCurrency(s.confirmed)}
-      </Stat>
-      <Stat label="Over / (under)" hint="Planned + other vs. target">
-        {variance == null ? (
-          <span className="text-neutral-300">—</span>
-        ) : (
-          <span className={cn(variance >= 0 ? 'text-emerald-600' : 'text-red-600')}>
-            {variance >= 0 ? formatCurrency(variance) : `(${formatCurrency(Math.abs(variance))})`}
-          </span>
-        )}
-      </Stat>
-      <Stat label="Shows" hint="Non-cancelled">
-        {s.count}
-      </Stat>
-      <Stat label="Avg / show" hint="Planned ÷ shows">
-        {s.average == null ? <span className="text-neutral-300">—</span> : formatCurrency(s.average)}
-      </Stat>
-      <Stat label="Actual to date" hint="Portal net revenue">
-        {formatCurrency(totals.actual)}
-      </Stat>
-      <Stat label="Projected" hint="Actual, portal proj., or plan">
-        {formatCurrency(totals.projected)}
-      </Stat>
-    </section>
-    <OtherRevenuePanel ym={ym} lines={otherRevenue} onSave={onSaveOther} onDelete={onDeleteOther} onCopy={onCopyOther} />
+      <ProgressToTarget summary={s} typical={typical} />
+      <MixStrip shows={shows} highlight={highlight} onHighlight={onHighlight} />
+
+      <section aria-label="Monthly summary" className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 lg:grid-cols-4">
+          <Stat size="lg" label="Target" hint="Click to edit">
+            <TargetEditor key={target ?? 'none'} target={target} onSave={onSaveTarget} />
+          </Stat>
+          <Stat size="lg" label="Projected" hint="Everything at full value, with other revenue">
+            {formatCurrency(s.projected)}
+          </Stat>
+          <Stat size="lg" label="Over / (under)" hint="Projected minus target">
+            {s.variance == null ? (
+              <span className="text-neutral-300">—</span>
+            ) : (
+              <span className={cn(s.variance >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                {s.variance >= 0 ? formatCurrency(s.variance) : `(${formatCurrency(Math.abs(s.variance))})`}
+              </span>
+            )}
+          </Stat>
+          <Stat
+            size="lg"
+            label="Expected"
+            hint={`Tentative at ${percent(EXPECTED_VALUE_WEIGHTS.Tentative)}, Idea at ${percent(EXPECTED_VALUE_WEIGHTS.Idea)}`}
+          >
+            {formatCurrency(s.expected)}
+          </Stat>
+        </div>
+
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 sm:grid-cols-3 lg:grid-cols-5">
+          <Stat size="sm" label="Actual to date" hint="Past shows">
+            {formatCurrency(s.actual)}
+          </Stat>
+          <Stat size="sm" label="Confirmed" hint="Upcoming, confirmed">
+            {formatCurrency(s.confirmed)}
+          </Stat>
+          <Stat size="sm" label="Other revenue" hint="Sponsorships this month">
+            {formatCurrency(s.other)}
+          </Stat>
+          <Stat size="sm" label="Shows" hint="Non-cancelled">
+            {s.count}
+          </Stat>
+          <Stat size="sm" label="Avg per show" hint="Show revenue ÷ shows">
+            {s.average == null ? <span className="text-neutral-300">—</span> : formatCurrency(s.average)}
+          </Stat>
+        </div>
+      </section>
+
+      <OtherRevenuePanel ym={ym} lines={otherRevenue} onSave={onSaveOther} onDelete={onDeleteOther} onCopy={onCopyOther} />
     </div>
   )
 }

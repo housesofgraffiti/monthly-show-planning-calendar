@@ -17,6 +17,11 @@ export function addMonths(ym: string, delta: number) {
   return toISO(year, monthIndex + delta, 1).slice(0, 7)
 }
 
+export function addDays(iso: string, delta: number) {
+  const [year, month, day] = iso.split('-').map(Number)
+  return toISO(year, month - 1, day + delta)
+}
+
 export function monthBounds(ym: string) {
   return { start: `${ym}-01`, end: `${addMonths(ym, 1)}-01` }
 }

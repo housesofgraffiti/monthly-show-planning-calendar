@@ -4,6 +4,7 @@ import { buildMonthGrid, formatLongDate, formatShortWeekday, WEEKDAYS } from '@/
 import type { Show } from '@/lib/shows'
 import { isPastShow, portalFor, type PortalMap } from '@/lib/portal'
 import { markersByDate, type DayMarker } from '@/lib/markers'
+import { isOpenNight, matchesMix, type MixKey } from '@/lib/planning'
 import { ShowCard } from './show-card'
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
   shows: Show[]
   portal?: PortalMap
   markers: DayMarker[]
+  highlight?: MixKey | null
   onAdd: (date: string) => void
   onOpen: (show: Show) => void
 }
@@ -33,6 +35,16 @@ function MarkerBanners({ markers }: { markers: DayMarker[] | undefined }) {
         </span>
       ))}
     </div>
+  )
+}
+
+function OpenLabel({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn('select-none text-[11px] font-medium uppercase tracking-wider text-sky-700/70', className)}
+    >
+      Open<span className="sr-only"> night, no shows booked</span>
+    </span>
   )
 }
 
@@ -59,7 +71,7 @@ function DayNumber({ day, isToday, muted }: { day: number; isToday: boolean; mut
   )
 }
 
-export function MonthGrid({ ym, todayISO, shows, portal, markers, onAdd, onOpen }: Props) {
+export function MonthGrid({ ym, todayISO, shows, portal, markers, highlight = null, onAdd, onOpen }: Props) {
   const markerMap = markersByDate(ym, markers)
   const renderCard = (show: Show) => (
     <ShowCard
@@ -68,6 +80,7 @@ export function MonthGrid({ ym, todayISO, shows, portal, markers, onAdd, onOpen 
       onOpen={onOpen}
       match={portalFor(show, portal)}
       past={isPastShow(show, todayISO)}
+      emphasis={highlight ? (matchesMix(show, highlight) ? 'on' : 'off') : undefined}
     />
   )
   const grid = buildMonthGrid(ym)
@@ -106,12 +119,15 @@ export function MonthGrid({ ym, todayISO, shows, portal, markers, onAdd, onOpen 
               )
             }
 
+            const open = isOpenNight(cell.iso, dayShows, todayISO)
+
             return (
               <div
                 key={cell.iso}
                 onClick={() => onAdd(cell.iso)}
                 className={cn(
                   'group relative flex min-h-36 cursor-pointer flex-col gap-1.5 p-2 transition-colors hover:bg-neutral-50',
+                  open && 'bg-sky-50/70 hover:bg-sky-100/60',
                   !lastCol && 'border-r border-neutral-100',
                   !lastRow && 'border-b border-neutral-100',
                 )}
@@ -132,6 +148,7 @@ export function MonthGrid({ ym, todayISO, shows, portal, markers, onAdd, onOpen 
                   </button>
                 </div>
                 {dayShows.map(renderCard)}
+                {open && <OpenLabel className="mt-auto" />}
               </div>
             )
           })}
@@ -142,8 +159,9 @@ export function MonthGrid({ ym, todayISO, shows, portal, markers, onAdd, onOpen 
         {monthDays.map((cell) => {
           const dayShows = byDate.get(cell.iso) ?? []
           const isToday = cell.iso === todayISO
+          const open = isOpenNight(cell.iso, dayShows, todayISO)
           return (
-            <li key={cell.iso} className="flex gap-3 p-3">
+            <li key={cell.iso} className={cn('flex gap-3 p-3', open && 'bg-sky-50/70')}>
               <div className="flex w-10 shrink-0 flex-col items-center gap-0.5 pt-0.5">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-neutral-400">
                   {formatShortWeekday(cell.iso)}
@@ -153,6 +171,7 @@ export function MonthGrid({ ym, todayISO, shows, portal, markers, onAdd, onOpen 
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <MarkerBanners markers={markerMap.get(cell.iso)} />
                 {dayShows.map(renderCard)}
+                {open && <OpenLabel className="px-1" />}
                 <button
                   type="button"
                   onClick={() => onAdd(cell.iso)}

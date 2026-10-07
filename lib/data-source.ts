@@ -4,6 +4,7 @@ import {
   deleteOtherRevenue,
   deleteShow,
   getDayMarkers,
+  getDiscoveryActuals,
   getImportCandidates,
   getMonthData,
   getPortalSuggestions,
@@ -30,6 +31,7 @@ export type DataMode = 'remote' | 'local'
 
 export type DataSource = {
   getMonth: (ym: string) => Promise<MonthData>
+  getDiscoveryActuals: () => Promise<number[]>
   saveShow: (input: ShowInput) => Promise<Show>
   deleteShow: (id: string) => Promise<void>
   saveTarget: (ym: string, target: number) => Promise<void>
@@ -52,6 +54,7 @@ export const remoteSource: DataSource = {
   saveMarker: (input) => saveDayMarker(input),
   deleteMarker: (id) => deleteDayMarker(id),
   getMonth: (ym) => getMonthData(ym),
+  getDiscoveryActuals: () => getDiscoveryActuals(),
   getPortalSuggestions: (date) => getPortalSuggestions(date),
   getImportCandidates: (ym) => getImportCandidates(ym),
   importFromPortal: (ym, choices) => importFromPortal(ym, choices),
@@ -163,6 +166,9 @@ export function createLocalSource(seedMonth: string): DataSource {
         target: state.targets[ym] ?? null,
         otherRevenue: state.otherRevenue.filter((l) => l.month === ym).sort((a, b) => a.label.localeCompare(b.label)),
       }
+    },
+    async getDiscoveryActuals() {
+      return []
     },
     async saveOtherRevenue(input) {
       const state = read(seedMonth)
