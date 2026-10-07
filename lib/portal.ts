@@ -1,4 +1,4 @@
-import type { Show } from './shows'
+import type { Organizer, Show } from './shows'
 
 export type PortalProjection = {
   tickets: number | null
@@ -22,6 +22,20 @@ export type PortalMatch = {
 export type PortalMap = Record<string, PortalMatch>
 
 export type PortalSuggestion = { eventId: string; venue: string }
+
+export type ImportCandidate = {
+  eventId: string
+  date: string
+  venue: string
+  ticketsAvailable: number | null
+  projectedRevenue: number | null
+  organizedBy: Organizer
+  existing: { id: string; format: string; venue: string } | null
+}
+
+export type ImportChoice = { eventId: string; action: 'create' | 'link'; showId?: string }
+
+export type ImportResult = { created: number; linked: number; skipped: number }
 
 export function portalFor(show: Show, portal: PortalMap | undefined): PortalMatch | undefined {
   const id = show.portalEventId.trim()

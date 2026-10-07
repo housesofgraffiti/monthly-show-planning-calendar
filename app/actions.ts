@@ -5,7 +5,14 @@ import { redirect } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { ACCESS_COOKIE, accessTokenFor, hasTeamAccess, safeEqual } from '@/lib/team-access'
 import { monthBounds } from '@/lib/dates'
-import type { PortalMap, PortalMatch, PortalSuggestion } from '@/lib/portal'
+import type {
+  ImportCandidate,
+  ImportChoice,
+  ImportResult,
+  PortalMap,
+  PortalMatch,
+  PortalSuggestion,
+} from '@/lib/portal'
 import {
   DATE_RE,
   isUuid,
@@ -242,6 +249,184 @@ export async function getPortalSuggestions(date: unknown): Promise<PortalSuggest
     eventId: r.event_id,
     venue: r.venue ?? '',
   }))
+}
+
+type ImportEventRow = {
+  event_id: string
+  show_date: string
+  venue: string | null
+  tickets_available: number | string | null
+  organized_as: string | null
+}
+
+type UnlinkedShowRow = {
+  id: string
+  show_date: string
+  format: string
+  venue: string | null
+  portal_event_id: string | null
+}
+
+// Reads portal_events and projections, never writes to them.
+async function findImportCandidates(ym: string): Promise<ImportCandidate[]> {
+  const { start, end } = monthBounds(ym)
+  const supabase = getSupabaseAdmin()
+
+  const eventsRes = await supabase
+    .from('portal_events')
+    .select('event_id, show_date, venue, tickets_available, organized_as')
+    .eq('status', 'published')
+    .gte('show_date', start)
+    .lt('show_date', end)
+    .order('show_date')
+    .order('event_id')
+  if (eventsRes.error) throw new Error(eventsRes.error.message)
+  const events = (eventsRes.data ?? []) as ImportEventRow[]
+  if (events.length === 0) return []
+  const ids = events.map((e) => e.event_id)
+
+  const [linkedRes, monthShowsRes, projectionsRes] = await Promise.all([
+    supabase.from('shows').select('portal_event_id').in('portal_event_id', ids),
+    supabase
+      .from('shows')
+      .select('id, show_date, format, venue, portal_event_id')
+      .gte('show_date', start)
+      .lt('show_date', end)
+      .order('show_date')
+      .order('created_at'),
+    supabase
+      .from('projections')
+      .select('event_id, projected_revenue_cents, computed_at')
+      .in('event_id', ids)
+      .order('computed_at', { ascending: false, nullsFirst: false }),
+  ])
+  if (linkedRes.error) throw new Error(linkedRes.error.message)
+  if (monthShowsRes.error) throw new Error(monthShowsRes.error.message)
+  if (projectionsRes.error) throw new Error(projectionsRes.error.message)
+
+  const linkedIds = new Set(
+    ((linkedRes.data ?? []) as { portal_event_id: string | null }[]).map((r) => r.portal_event_id),
+  )
+
+  const unlinkedByDate = new Map<string, UnlinkedShowRow[]>()
+  for (const row of (monthShowsRes.data ?? []) as UnlinkedShowRow[]) {
+    if (row.portal_event_id) continue
+    unlinkedByDate.set(row.show_date, [...(unlinkedByDate.get(row.show_date) ?? []), row])
+  }
+
+  const projectedCents = new Map<string, number>()
+  for (const row of (projectionsRes.data ?? []) as {
+    event_id: string
+    projected_revenue_cents: number | string | null
+  }[]) {
+    if (!projectedCents.has(row.event_id) && row.projected_revenue_cents != null) {
+      projectedCents.set(row.event_id, Number(row.projected_revenue_cents))
+    }
+  }
+
+  const candidates: ImportCandidate[] = []
+  for (const event of events) {
+    if (linkedIds.has(event.event_id)) continue
+    // Each existing show can be offered to only one event.
+    const match = unlinkedByDate.get(event.show_date)?.shift()
+    const cents = projectedCents.get(event.event_id)
+    candidates.push({
+      eventId: event.event_id,
+      date: event.show_date,
+      venue: event.venue ?? '',
+      ticketsAvailable: toNum(event.tickets_available),
+      projectedRevenue: cents == null ? null : cents / 100,
+      organizedBy: /producer/i.test(event.organized_as ?? '') ? 'Local Producer' : 'Sofar',
+      existing: match ? { id: match.id, format: match.format, venue: match.venue ?? '' } : null,
+    })
+  }
+  return candidates
+}
+
+export async function getImportCandidates(ym: string): Promise<ImportCandidate[]> {
+  await requireAccess()
+  assertMonth(ym)
+  return findImportCandidates(ym)
+}
+
+export async function importFromPortal(ym: string, raw: unknown): Promise<ImportResult> {
+  await requireAccess()
+  assertMonth(ym)
+  if (!Array.isArray(raw) || raw.length > 500) throw new Error('Invalid import selection')
+
+  const choices = new Map<string, ImportChoice>()
+  for (const item of raw) {
+    const c = item as Partial<ImportChoice> | null
+    if (
+      !c ||
+      typeof c.eventId !== 'string' ||
+      c.eventId.length > 120 ||
+      (c.action !== 'create' && c.action !== 'link') ||
+      (c.showId !== undefined && !isUuid(c.showId))
+    ) {
+      throw new Error('Invalid import selection')
+    }
+    choices.set(c.eventId, c as ImportChoice)
+  }
+
+  // Re-derive candidates so anything linked or changed since the panel opened is skipped.
+  const candidates = await findImportCandidates(ym)
+  const result: ImportResult = { created: 0, linked: 0, skipped: 0 }
+  const toCreate: ImportCandidate[] = []
+  const toLink: { showId: string; eventId: string }[] = []
+
+  for (const choice of choices.values()) {
+    const candidate = candidates.find((c) => c.eventId === choice.eventId)
+    if (!candidate) {
+      result.skipped++
+    } else if (choice.action === 'create') {
+      toCreate.push(candidate)
+    } else if (candidate.existing && candidate.existing.id === choice.showId) {
+      toLink.push({ showId: candidate.existing.id, eventId: candidate.eventId })
+    } else {
+      result.skipped++
+    }
+  }
+
+  const supabase = getSupabaseAdmin()
+
+  if (toCreate.length > 0) {
+    const rows = toCreate.map((c) => ({
+      show_date: c.date,
+      category: 'Core',
+      format: 'Discovery',
+      venue: c.venue || null,
+      tickets: c.ticketsAvailable,
+      projected_revenue: c.projectedRevenue,
+      status: 'Confirmed',
+      region: 'LA',
+      organized_by: c.organizedBy,
+      portal_event_id: c.eventId,
+      notes: 'Imported from portal. Check format and price.',
+    }))
+    let { error } = await supabase.from('shows').insert(rows)
+    if (error && isMissingNewColumns(error)) {
+      ;({ error } = await supabase
+        .from('shows')
+        .insert(rows.map(({ region, organized_by, ...base }) => base)))
+    }
+    if (error) throw new Error(error.message)
+    result.created = rows.length
+  }
+
+  for (const link of toLink) {
+    const { data, error } = await supabase
+      .from('shows')
+      .update({ portal_event_id: link.eventId })
+      .eq('id', link.showId)
+      .is('portal_event_id', null)
+      .select('id')
+    if (error) throw new Error(error.message)
+    if (data && data.length > 0) result.linked++
+    else result.skipped++
+  }
+
+  return result
 }
 
 export async function saveShow(raw: unknown): Promise<Show> {
