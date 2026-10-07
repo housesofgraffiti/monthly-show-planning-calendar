@@ -12,6 +12,7 @@ type HeaderProps = {
   onPrev: () => void
   onNext: () => void
   onAdd: () => void
+  onImport?: () => void
   view: View
   onViewChange: (view: View) => void
 }
@@ -19,7 +20,7 @@ type HeaderProps = {
 const outlineBtn =
   'inline-flex h-11 items-center justify-center border border-neutral-200 bg-white text-sm font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900'
 
-export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, view, onViewChange }: HeaderProps) {
+export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, onImport, view, onViewChange }: HeaderProps) {
   const { month, year } = monthTitle(ym)
   return (
     <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -31,7 +32,7 @@ export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, view, onVie
           {month} <span className="text-neutral-300">{year}</span>
         </h1>
       </div>
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
         <div
           role="group"
           aria-label="Calendar view"
@@ -67,6 +68,11 @@ export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, view, onVie
             <ChevronRight className="size-4" aria-hidden />
           </button>
         </div>
+        {onImport && (
+          <button type="button" onClick={onImport} className={`${outlineBtn} ml-auto rounded-xl px-4 sm:ml-0`}>
+            Import from portal
+          </button>
+        )}
         <button
           type="button"
           onClick={onAdd}

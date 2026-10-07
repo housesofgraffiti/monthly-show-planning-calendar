@@ -5,8 +5,9 @@ import useSWR from 'swr'
 import { addMonths } from '@/lib/dates'
 import { createLocalSource, remoteSource, resetLocalData, type DataMode } from '@/lib/data-source'
 import type { Show, ShowInput } from '@/lib/shows'
-import { portalFor } from '@/lib/portal'
+import { portalFor, type ImportResult } from '@/lib/portal'
 import { CalendarHeader, Legend } from './calendar-header'
+import { ImportPanel } from './import-panel'
 import { MonthGrid } from './month-grid'
 import { ShowDialog } from './show-dialog'
 import { SummaryBar } from './summary-bar'
@@ -20,6 +21,8 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const [ym, setYm] = useState(thisMonth)
   const [view, setView] = useState<View>('calendar')
   const [editor, setEditor] = useState<Editor | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState<string | null>(null)
   const source = useMemo(() => (mode === 'remote' ? remoteSource : createLocalSource(thisMonth)), [mode, thisMonth])
 
   const { data, error, isValidating, mutate } = useSWR(['month', mode, ym], () => source.getMonth(ym), {
@@ -46,6 +49,15 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
     await mutate()
   }
 
+  const handleImportDone = async (result: ImportResult) => {
+    setImporting(false)
+    const parts = [`Imported ${result.created}`, `linked ${result.linked}`]
+    if (result.skipped > 0) parts.push(`skipped ${result.skipped}`)
+    setImportMessage(parts.join(', '))
+    window.setTimeout(() => setImportMessage(null), 6000)
+    await mutate()
+  }
+
   const handleSaveTarget = async (value: number) => {
     await mutate(
       async () => {
@@ -64,6 +76,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         onPrev={() => setYm((m) => addMonths(m, -1))}
         onNext={() => setYm((m) => addMonths(m, 1))}
         onAdd={() => openAdd(ym === thisMonth ? todayISO : `${ym}-01`)}
+        onImport={mode === 'remote' ? () => setImporting(true) : undefined}
         view={view}
         onViewChange={setView}
       />
@@ -95,6 +108,25 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
           onSave={handleSave}
           onDelete={handleDelete}
         />
+      )}
+
+      {importing && (
+        <ImportPanel
+          ym={ym}
+          getCandidates={source.getImportCandidates}
+          onImport={(choices) => source.importFromPortal(ym, choices)}
+          onClose={() => setImporting(false)}
+          onDone={handleImportDone}
+        />
+      )}
+
+      {importMessage && (
+        <p
+          role="status"
+          className="fixed bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg"
+        >
+          {importMessage}
+        </p>
       )}
 
       {mode === 'local' && (
