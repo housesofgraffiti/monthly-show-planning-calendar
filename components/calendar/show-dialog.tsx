@@ -14,6 +14,7 @@ import {
   ORGANIZERS,
   REGIONS,
   REVENUE_TYPES,
+  STATUS_LABELS,
   STATUSES,
   type Category,
   type Organizer,
@@ -78,14 +79,14 @@ function Field({
   )
 }
 
-function Select({ id, value, onChange, options }: { id: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
+function Select({ id, value, onChange, options, labels }: { id: string; value: string; onChange: (v: string) => void; options: readonly string[]; labels?: Record<string, string> }) {
   return (
     <div className="relative">
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={cn(inputCls, 'appearance-none pr-10')}>
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
-          </option>
+  {labels?.[o] ?? o}
+  </option>
         ))}
       </select>
       <ChevronDown className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-neutral-400" aria-hidden />
@@ -354,7 +355,7 @@ export function ShowDialog({
               ))}
             </Field>
             <Field label="Status" htmlFor={f('status')}>
-              <Select id={f('status')} value={status} onChange={(v) => setStatus(v as Status)} options={STATUSES} />
+              <Select id={f('status')} value={status} onChange={(v) => setStatus(v as Status)} options={STATUSES} labels={STATUS_LABELS} />
             </Field>
             <Field label="Region" htmlFor={f('region')}>
               <Select id={f('region')} value={region} onChange={(v) => setRegion(v as Region)} options={REGIONS} />
