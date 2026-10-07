@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, summarize, type Show } from '@/lib/shows'
+import { portalTotals, type PortalMap } from '@/lib/portal'
 
 type Props = {
   shows: Show[]
   target: number | null
+  portal?: PortalMap
+  todayISO: string
   onSaveTarget: (value: number) => Promise<void>
 }
 
@@ -77,14 +80,15 @@ function TargetEditor({ target, onSave }: { target: number | null; onSave: (v: n
   )
 }
 
-export function SummaryBar({ shows, target, onSaveTarget }: Props) {
+export function SummaryBar({ shows, target, portal, todayISO, onSaveTarget }: Props) {
   const s = summarize(shows, target)
   const variance = s.variance
+  const totals = portalTotals(shows, portal, todayISO)
 
   return (
     <section
       aria-label="Monthly summary"
-      className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 sm:grid-cols-3 lg:grid-cols-6"
+      className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 sm:grid-cols-4"
     >
       <Stat label="Monthly target" hint="Click to edit">
         <TargetEditor key={target ?? 'none'} target={target} onSave={onSaveTarget} />
@@ -109,6 +113,12 @@ export function SummaryBar({ shows, target, onSaveTarget }: Props) {
       </Stat>
       <Stat label="Avg / show" hint="Planned ÷ shows">
         {s.average == null ? <span className="text-neutral-300">—</span> : formatCurrency(s.average)}
+      </Stat>
+      <Stat label="Actual to date" hint="Portal net revenue">
+        {formatCurrency(totals.actual)}
+      </Stat>
+      <Stat label="Projected" hint="Actual, portal proj., or plan">
+        {formatCurrency(totals.projected)}
       </Stat>
     </section>
   )

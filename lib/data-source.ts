@@ -1,5 +1,6 @@
-import { deleteShow, getMonthData, saveMonthlyTarget, saveShow } from '@/app/actions'
+import { deleteShow, getMonthData, getPortalSuggestions, saveMonthlyTarget, saveShow } from '@/app/actions'
 import { daysInMonth } from '@/lib/dates'
+import type { PortalSuggestion } from '@/lib/portal'
 import type { Category, MonthData, Show, ShowInput, Status } from '@/lib/shows'
 
 export type DataMode = 'remote' | 'local'
@@ -9,10 +10,12 @@ export type DataSource = {
   saveShow: (input: ShowInput) => Promise<Show>
   deleteShow: (id: string) => Promise<void>
   saveTarget: (ym: string, target: number) => Promise<void>
+  getPortalSuggestions: (date: string) => Promise<PortalSuggestion[]>
 }
 
 export const remoteSource: DataSource = {
   getMonth: (ym) => getMonthData(ym),
+  getPortalSuggestions: (date) => getPortalSuggestions(date),
   saveShow: (input) => saveShow(input),
   deleteShow: (id) => deleteShow(id),
   saveTarget: (ym, target) => saveMonthlyTarget(ym, target),
@@ -116,6 +119,9 @@ export function createLocalSource(seedMonth: string): DataSource {
       const state = read(seedMonth)
       state.targets[ym] = target
       write(state)
+    },
+    async getPortalSuggestions() {
+      return []
     },
   }
 }

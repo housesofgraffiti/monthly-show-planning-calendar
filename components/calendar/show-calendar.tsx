@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { addMonths } from '@/lib/dates'
 import { createLocalSource, remoteSource, resetLocalData, type DataMode } from '@/lib/data-source'
 import type { Show, ShowInput } from '@/lib/shows'
+import { portalFor } from '@/lib/portal'
 import { CalendarHeader, Legend } from './calendar-header'
 import { MonthGrid } from './month-grid'
 import { ShowDialog } from './show-dialog'
@@ -28,6 +29,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
 
   const shows = data?.shows ?? []
   const target = data?.target ?? null
+  const portal = data?.portal
 
   const openAdd = (date: string) => setEditor({ date, key: Date.now() })
   const openEdit = (show: Show) => setEditor({ show, date: show.date, key: Date.now() })
@@ -50,7 +52,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         await source.saveTarget(ym, value)
         return source.getMonth(ym)
       },
-      { optimisticData: { shows, target: value }, rollbackOnError: true },
+      { optimisticData: { ...data, shows, target: value }, rollbackOnError: true },
     )
   }
 
@@ -66,19 +68,19 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         onViewChange={setView}
       />
 
-      <SummaryBar shows={shows} target={target} onSaveTarget={handleSaveTarget} />
+      <SummaryBar shows={shows} target={target} portal={portal} todayISO={todayISO} onSaveTarget={handleSaveTarget} />
 
       <div className="flex flex-col gap-4">
-        {view === 'calendar' && <Legend syncing={isValidating} />}
+        {view === 'calendar' && <Legend syncing={isValidating} portalSyncedAt={data?.portalSyncedAt} />}
         {error && (
           <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error instanceof Error ? error.message : 'Could not load shows.'}
           </p>
         )}
         {view === 'calendar' ? (
-          <MonthGrid ym={ym} todayISO={todayISO} shows={shows} onAdd={openAdd} onOpen={openEdit} />
+          <MonthGrid ym={ym} todayISO={todayISO} shows={shows} portal={portal} onAdd={openAdd} onOpen={openEdit} />
         ) : (
-          <TableView ym={ym} shows={shows} onOpen={openEdit} />
+          <TableView ym={ym} shows={shows} portal={portal} onOpen={openEdit} />
         )}
       </div>
 
@@ -87,6 +89,8 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
           key={editor.key}
           show={editor.show}
           date={editor.date}
+          match={editor.show ? portalFor(editor.show, portal) : undefined}
+          getSuggestions={source.getPortalSuggestions}
           onClose={() => setEditor(null)}
           onSave={handleSave}
           onDelete={handleDelete}

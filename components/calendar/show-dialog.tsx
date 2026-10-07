@@ -2,11 +2,14 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, X } from 'lucide-react'
+import useSWR from 'swr'
 import { cn } from '@/lib/utils'
 import { formatLongDate } from '@/lib/dates'
 import {
   CATEGORIES,
+  DATE_RE,
   DEFAULT_TICKET_PRICES,
+  formatCurrency,
   FORMATS,
   ORGANIZERS,
   REGIONS,
@@ -18,11 +21,21 @@ import {
   type ShowInput,
   type Status,
 } from '@/lib/shows'
+import {
+  capitalize,
+  rangeLabel,
+  soldLabel,
+  timeAgo,
+  type PortalMatch,
+  type PortalSuggestion,
+} from '@/lib/portal'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
   show?: Show
   date: string
+  match?: PortalMatch
+  getSuggestions?: (date: string) => Promise<PortalSuggestion[]>
   onClose: () => void
   onSave: (input: ShowInput) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -91,7 +104,42 @@ function MoneyInput({ id, value, onChange, placeholder = '0' }: { id: string; va
   )
 }
 
-export function ShowDialog({ show, date: initialDate, onClose, onSave, onDelete }: Props) {
+function PortalSummary({ match }: { match: PortalMatch }) {
+  const p = match.projection
+  const range = p ? rangeLabel(p) : null
+  const rows: [string, string][] = []
+  if (match.hasEvent) {
+    rows.push(['Sold', soldLabel(match).replace(' sold', '')])
+    if (match.revenue != null) rows.push(['Actual revenue', formatCurrency(match.revenue)])
+  }
+  if (p?.tickets != null) {
+    rows.push([
+      'Projection',
+      `Proj. ${Math.round(p.tickets)}${range ? `, range ${range}` : ''}${p.confidence === 'low' ? ' (low confidence)' : ''}`,
+    ])
+  }
+  if (p?.paceLabel) rows.push(['Pace', capitalize(p.paceLabel)])
+  if (rows.length === 0) return null
+
+  return (
+    <section aria-label="From portal" className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium text-neutral-700">From portal</h3>
+        {p?.computedAt && <span className="text-xs text-neutral-400">updated {timeAgo(p.computedAt)}</span>}
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-neutral-500">{label}</dt>
+            <dd className="tabular-nums text-neutral-900">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
+export function ShowDialog({ show, date: initialDate, match, getSuggestions, onClose, onSave, onDelete }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
   const f = (name: string) => `${id}-${name}`
@@ -123,6 +171,11 @@ export function ShowDialog({ show, date: initialDate, onClose, onSave, onDelete 
   useEffect(() => {
     ref.current?.showModal()
   }, [])
+
+  const wantSuggestions = Boolean(getSuggestions) && portalEventId.trim() === '' && DATE_RE.test(date)
+  const { data: suggestions } = useSWR(wantSuggestions ? ['portal-suggestions', date] : null, () =>
+    getSuggestions!(date),
+  )
 
   const t = tickets === '' ? null : Number(tickets)
   const p = price === '' ? null : Number(price)
@@ -304,7 +357,27 @@ export function ShowDialog({ show, date: initialDate, onClose, onSave, onDelete 
 
           <Field label="Portal event ID" htmlFor={f('portal')} optional>
             <input id={f('portal')} value={portalEventId} onChange={(e) => setPortalEventId(e.target.value)} maxLength={120} className={inputCls} />
+            {wantSuggestions && suggestions && suggestions.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-neutral-400">Portal events on this date</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.eventId}
+                      type="button"
+                      onClick={() => setPortalEventId(s.eventId)}
+                      className="rounded-lg border border-neutral-200 px-2.5 py-1 text-left text-xs text-neutral-700 transition-colors hover:border-neutral-900 hover:bg-neutral-50"
+                    >
+                      <span className="tabular-nums">{s.eventId}</span>
+                      {s.venue && <span className="text-neutral-500"> · {s.venue}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </Field>
+
+          {match && <PortalSummary match={match} />}
 
           <Field label="Notes" htmlFor={f('notes')} optional>
             <textarea
