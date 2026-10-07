@@ -1,11 +1,7 @@
 import { isPastShow, type PortalMap } from './portal'
 import { isFlatFee, isLocalProducer, showRevenueOn } from './revenue'
 import type { Show } from './shows'
-import {
-  DEFAULT_DISCOVERY_REVENUE,
-  DISCOVERY_MIN_SAMPLE,
-  EXPECTED_VALUE_WEIGHTS,
-} from './planning-config'
+import { DEFAULT_DISCOVERY_REVENUE, EXPECTED_VALUE_WEIGHTS } from './planning-config'
 
 export type PlanningSummary = {
   target: number | null
@@ -77,14 +73,14 @@ export function planningSummary({
   }
 }
 
-export type TypicalDiscovery = { value: number; sample: number; isDefault: boolean }
+export type TypicalDiscovery = { value: number; isDefault: boolean }
 
-export function typicalDiscovery(actuals: number[]): TypicalDiscovery {
-  const average = actuals.length ? actuals.reduce((sum, n) => sum + n, 0) / actuals.length : 0
-  if (actuals.length < DISCOVERY_MIN_SAMPLE || average <= 0) {
-    return { value: DEFAULT_DISCOVERY_REVENUE, sample: actuals.length, isDefault: true }
+// `stat` is planning_stats.typical_discovery_revenue in dollars, or null when the row is missing.
+export function typicalDiscovery(stat: number | null): TypicalDiscovery {
+  if (stat == null || !Number.isFinite(stat) || stat <= 0) {
+    return { value: DEFAULT_DISCOVERY_REVENUE, isDefault: true }
   }
-  return { value: average, sample: actuals.length, isDefault: false }
+  return { value: stat, isDefault: false }
 }
 
 export function showsToGo(gap: number, typical: TypicalDiscovery) {

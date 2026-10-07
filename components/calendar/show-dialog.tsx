@@ -25,6 +25,7 @@ import {
 } from '@/lib/shows'
 import {
   capitalize,
+  CONFIDENCE_NOTES,
   rangeLabel,
   soldLabel,
   timeAgo,
@@ -111,15 +112,30 @@ function MoneyInput({ id, value, onChange, placeholder = '0' }: { id: string; va
 function PortalSummary({ match }: { match: PortalMatch }) {
   const p = match.projection
   const range = p ? rangeLabel(p) : null
-  const rows: [string, string][] = []
+  const rows: [string, React.ReactNode][] = []
   if (match.hasEvent) {
     rows.push(['Sold', soldLabel(match).replace(' sold', '')])
     if (match.revenue != null) rows.push(['Actual revenue', formatCurrency(match.revenue)])
   }
-  if (p?.tickets != null) {
+  if (p && (p.tickets != null || p.revenue != null)) {
+    const tickets =
+      p.tickets != null
+        ? `${Math.round(p.tickets)} ${Math.round(p.tickets) === 1 ? 'ticket' : 'tickets'}${range ? ` (${range})` : ''}`
+        : null
+    const revenueRange =
+      p.revenueLow != null && p.revenueHigh != null
+        ? ` (${formatCurrency(p.revenueLow)} to ${formatCurrency(p.revenueHigh)})`
+        : ''
+    const revenue = p.revenue != null ? `${formatCurrency(p.revenue)}${revenueRange}` : null
+    rows.push(['Projection', [tickets, revenue].filter(Boolean).join(' · ')])
+  }
+  if (p?.confidence) {
     rows.push([
-      'Projection',
-      `Proj. ${Math.round(p.tickets)}${range ? `, range ${range}` : ''}${p.confidence === 'low' ? ' (low confidence)' : ''}`,
+      'Confidence',
+      <>
+        {capitalize(p.confidence)}
+        <span className="block text-xs text-neutral-500">{CONFIDENCE_NOTES[p.confidence]}</span>
+      </>,
     ])
   }
   if (p?.paceLabel) rows.push(['Pace', capitalize(p.paceLabel)])
@@ -139,6 +155,9 @@ function PortalSummary({ match }: { match: PortalMatch }) {
           </div>
         ))}
       </dl>
+      {p?.selloutLikely && (
+        <p className="w-fit rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Sellout likely</p>
+      )}
     </section>
   )
 }

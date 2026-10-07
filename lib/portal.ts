@@ -5,9 +5,25 @@ export type PortalProjection = {
   low: number | null
   high: number | null
   revenue: number | null
-  confidence: string | null
+  revenueLow: number | null
+  revenueHigh: number | null
+  confidence: ConfidenceTier | null
+  selloutLikely: boolean
   paceLabel: string | null
   computedAt: string | null
+}
+
+export type ConfidenceTier = 'high' | 'low'
+
+export const CONFIDENCE_NOTES: Record<ConfidenceTier, string> = {
+  high: 'within 3 days, known venue',
+  low: 'more than 3 days out, or new venue or format',
+}
+
+// confidence_tier is the upgraded column; the old confidence column is only the fallback.
+export function resolveConfidence(tier: string | null, legacy: string | null): ConfidenceTier | null {
+  const value = (tier?.trim() ? tier : (legacy ?? '')).trim().toLowerCase()
+  return value === 'high' || value === 'low' ? value : null
 }
 
 export type PortalMatch = {

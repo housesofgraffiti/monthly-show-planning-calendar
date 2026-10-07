@@ -28,22 +28,25 @@ function PortalLine({ match, past, className }: { match: PortalMatch; past: bool
   const parts: React.ReactNode[] = []
   if (match.hasEvent) parts.push(soldLabel(match))
   if (projection?.tickets != null) {
+    const low = projection.confidence === 'low'
     parts.push(
-      <>
-        Proj. {Math.round(projection.tickets)}
-        {projection.confidence === 'low' && (
-          <span className="opacity-70" title="Low confidence">
-            ?
-          </span>
-        )}
-      </>,
+      <span className={cn(low && 'opacity-60')}>
+        Proj. {low && '~'}
+        {Math.round(projection.tickets)}
+      </span>,
     )
   }
-  if (parts.length === 0 && !tag) return null
+  const sellout = projection?.selloutLikely === true
+  if (parts.length === 0 && !tag && !sellout) return null
 
   return (
-    <span className={cn('flex items-center justify-between gap-1.5 text-[11px] leading-snug tabular-nums', className)}>
-      <span className="truncate">
+    <span
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 text-[11px] leading-snug tabular-nums',
+        className,
+      )}
+    >
+      <span className="max-w-full truncate">
         {parts.map((part, i) => (
           <span key={i}>
             {i > 0 && ' · '}
@@ -51,14 +54,23 @@ function PortalLine({ match, past, className }: { match: PortalMatch; past: bool
           </span>
         ))}
       </span>
-      {tag && (
-        <span
-          className={cn(
-            'shrink-0 rounded-sm px-1 text-[10px] font-semibold leading-tight',
-            tag === 'Behind' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700',
+      {(tag || sellout) && (
+        <span className="flex shrink-0 items-center gap-1">
+          {sellout && (
+            <span className="rounded-sm bg-amber-100 px-1 text-[10px] font-semibold leading-tight text-amber-800">
+              Sellout likely
+            </span>
           )}
-        >
-          {tag}
+          {tag && (
+            <span
+              className={cn(
+                'rounded-sm px-1 text-[10px] font-semibold leading-tight',
+                tag === 'Behind' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700',
+              )}
+            >
+              {tag}
+            </span>
+          )}
         </span>
       )}
     </span>
