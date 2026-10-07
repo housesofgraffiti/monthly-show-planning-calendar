@@ -78,18 +78,3 @@ export function timeAgo(iso: string, now = Date.now()) {
 }
 
 export const isStale = (iso: string, now = Date.now()) => now - new Date(iso).getTime() > 3 * 60 * 60 * 1000
-
-export function portalTotals(shows: Show[], portal: PortalMap | undefined, todayISO: string) {
-  let actual = 0
-  let projected = 0
-  for (const show of shows) {
-    const match = portalFor(show, portal)
-    if (match?.hasEvent) actual += match.revenue ?? 0
-    if (show.status === 'Cancelled') continue
-    const past = isPastShow(show, todayISO)
-    if (past && match?.hasEvent) projected += match.revenue ?? 0
-    else if (!past && match?.projection?.revenue != null) projected += match.projection.revenue
-    else projected += show.projectedRevenue ?? 0
-  }
-  return { actual, projected }
-}

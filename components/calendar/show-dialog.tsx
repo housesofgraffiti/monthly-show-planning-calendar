@@ -13,10 +13,12 @@ import {
   FORMATS,
   ORGANIZERS,
   REGIONS,
+  REVENUE_TYPES,
   STATUSES,
   type Category,
   type Organizer,
   type Region,
+  type RevenueType,
   type Show,
   type ShowInput,
   type Status,
@@ -29,6 +31,7 @@ import {
   type PortalMatch,
   type PortalSuggestion,
 } from '@/lib/portal'
+import { markersOn, type DayMarker } from '@/lib/markers'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -36,6 +39,7 @@ type Props = {
   date: string
   match?: PortalMatch
   getSuggestions?: (date: string) => Promise<PortalSuggestion[]>
+  getMarkers?: (ym: string) => Promise<DayMarker[]>
   onClose: () => void
   onSave: (input: ShowInput) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -139,7 +143,16 @@ function PortalSummary({ match }: { match: PortalMatch }) {
   )
 }
 
-export function ShowDialog({ show, date: initialDate, match, getSuggestions, onClose, onSave, onDelete }: Props) {
+export function ShowDialog({
+  show,
+  date: initialDate,
+  match,
+  getSuggestions,
+  getMarkers,
+  onClose,
+  onSave,
+  onDelete,
+}: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
   const f = (name: string) => `${id}-${name}`
@@ -153,6 +166,10 @@ export function ShowDialog({ show, date: initialDate, match, getSuggestions, onC
   const [status, setStatus] = useState<Status>(show?.status ?? 'Idea')
   const [region, setRegion] = useState<Region>(show?.region ?? 'LA')
   const [organizedBy, setOrganizedBy] = useState<Organizer>(show?.organizedBy ?? 'Sofar')
+  const [revenueType, setRevenueType] = useState<RevenueType>(show?.revenueType ?? 'Ticketed')
+  const [flatFee, setFlatFee] = useState(numStr(show?.flatFee))
+  const [venueFee, setVenueFee] = useState(numStr(show?.venueFee))
+  const [merch, setMerch] = useState(show?.merch ?? false)
   const [area, setArea] = useState(show?.area ?? '')
   const [venue, setVenue] = useState(show?.venue ?? '')
   const [tickets, setTickets] = useState(numStr(show?.tickets))
@@ -177,6 +194,13 @@ export function ShowDialog({ show, date: initialDate, match, getSuggestions, onC
     getSuggestions!(date),
   )
 
+  const { data: customMarkers } = useSWR(
+    getMarkers && DATE_RE.test(date) ? ['markers', date.slice(0, 7)] : null,
+    () => getMarkers!(date.slice(0, 7)),
+  )
+  const dateMarkers = DATE_RE.test(date) ? markersOn(date, customMarkers ?? []) : []
+
+  const isFlat = revenueType === 'Flat fee'
   const t = tickets === '' ? null : Number(tickets)
   const p = price === '' ? null : Number(price)
   const computed = t != null && p != null && Number.isFinite(t * p) ? Math.round(t * p * 100) / 100 : null
@@ -213,6 +237,10 @@ export function ShowDialog({ show, date: initialDate, match, getSuggestions, onC
         projectedRevenue: revenueValue === '' ? null : Number(revenueValue),
         portalEventId,
         notes,
+        revenueType,
+        flatFee: flatFee === '' ? null : Number(flatFee),
+        venueFee: venueFee === '' ? null : Number(venueFee),
+        merch,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save this show.')
@@ -299,6 +327,12 @@ export function ShowDialog({ show, date: initialDate, match, getSuggestions, onC
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <Field label="Date" htmlFor={f('date')}>
               <input id={f('date')} type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+              {dateMarkers.map((m) => (
+                <p key={m.id} className={cn('text-xs', m.type === 'event' ? 'text-amber-700' : 'text-neutral-500')}>
+                  {m.label}
+                  {m.note && ` · ${m.note}`}
+                </p>
+              ))}
             </Field>
             <Field label="Status" htmlFor={f('status')}>
               <Select id={f('status')} value={status} onChange={(v) => setStatus(v as Status)} options={STATUSES} />
@@ -320,21 +354,41 @@ export function ShowDialog({ show, date: initialDate, match, getSuggestions, onC
             <Field label="Venue" htmlFor={f('venue')}>
               <input id={f('venue')} value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" maxLength={160} className={inputCls} />
             </Field>
-            <Field label="Tickets" htmlFor={f('tickets')}>
-              <input
-                id={f('tickets')}
-                inputMode="numeric"
-                value={tickets}
-                placeholder="0"
-                onChange={(e) => setTickets(e.target.value.replace(/\D/g, ''))}
-                className={cn(inputCls, 'tabular-nums')}
+            <Field label="Revenue type" htmlFor={f('revenueType')}>
+              <Select
+                id={f('revenueType')}
+                value={revenueType}
+                onChange={(v) => setRevenueType(v as RevenueType)}
+                options={REVENUE_TYPES}
               />
             </Field>
-            <Field label="Ticket price" htmlFor={f('price')}>
-              <MoneyInput id={f('price')} value={price} onChange={setPrice} />
+            <Field label="Venue fee" htmlFor={f('venueFee')} optional>
+              <MoneyInput id={f('venueFee')} value={venueFee} onChange={setVenueFee} />
             </Field>
+            {isFlat ? (
+              <Field label="Flat fee" htmlFor={f('flatFee')}>
+                <MoneyInput id={f('flatFee')} value={flatFee} onChange={setFlatFee} />
+              </Field>
+            ) : (
+              <>
+                <Field label="Tickets" htmlFor={f('tickets')}>
+                  <input
+                    id={f('tickets')}
+                    inputMode="numeric"
+                    value={tickets}
+                    placeholder="0"
+                    onChange={(e) => setTickets(e.target.value.replace(/\D/g, ''))}
+                    className={cn(inputCls, 'tabular-nums')}
+                  />
+                </Field>
+                <Field label="Ticket price" htmlFor={f('price')}>
+                  <MoneyInput id={f('price')} value={price} onChange={setPrice} />
+                </Field>
+              </>
+            )}
           </div>
 
+          {!isFlat && (
           <Field
             label="Projected revenue"
             htmlFor={f('revenue')}
@@ -354,6 +408,17 @@ export function ShowDialog({ show, date: initialDate, match, getSuggestions, onC
               onChange={(v) => setRevenueOverride(v === '' && computed == null ? null : v)}
             />
           </Field>
+          )}
+
+          <label className="flex items-center gap-3 text-[15px] text-neutral-700">
+            <input
+              type="checkbox"
+              checked={merch}
+              onChange={(e) => setMerch(e.target.checked)}
+              className="size-5 rounded border-neutral-300 accent-neutral-900"
+            />
+            Merch table at this show
+          </label>
 
           <Field label="Portal event ID" htmlFor={f('portal')} optional>
             <input id={f('portal')} value={portalEventId} onChange={(e) => setPortalEventId(e.target.value)} maxLength={120} className={inputCls} />

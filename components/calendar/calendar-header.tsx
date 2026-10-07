@@ -23,7 +23,7 @@ const outlineBtn =
 export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, onImport, view, onViewChange }: HeaderProps) {
   const { month, year } = monthTitle(ym)
   return (
-    <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <header className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
       <div className="flex flex-col gap-2">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-400">
           Sofar Sounds LA · Show Calendar
@@ -32,7 +32,7 @@ export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, onImport, v
           {month} <span className="text-neutral-300">{year}</span>
         </h1>
       </div>
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5 sm:flex-nowrap sm:whitespace-nowrap">
         <div
           role="group"
           aria-label="Calendar view"
@@ -86,7 +86,15 @@ export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, onImport, v
   )
 }
 
-export function Legend({ syncing, portalSyncedAt }: { syncing: boolean; portalSyncedAt?: string | null }) {
+export function Legend({
+  syncing,
+  portalSyncedAt,
+  onMarkers,
+}: {
+  syncing: boolean
+  portalSyncedAt?: string | null
+  onMarkers?: () => void
+}) {
   const stale = portalSyncedAt ? isStale(portalSyncedAt) : false
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 text-sm text-neutral-600">
@@ -107,6 +115,17 @@ export function Legend({ syncing, portalSyncedAt }: { syncing: boolean; portalSy
           Idea / Tentative
         </li>
         <li className="text-neutral-400 line-through">Cancelled</li>
+        {onMarkers && (
+          <li>
+            <button
+              type="button"
+              onClick={onMarkers}
+              className="rounded-md text-neutral-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+            >
+              Day markers
+            </button>
+          </li>
+        )}
       </ul>
       <div className="flex items-center gap-3">
         {portalSyncedAt && (

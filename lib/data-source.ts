@@ -1,15 +1,30 @@
 import {
+  copyOtherRevenueToNextMonth,
+  deleteDayMarker,
+  deleteOtherRevenue,
   deleteShow,
+  getDayMarkers,
   getImportCandidates,
   getMonthData,
   getPortalSuggestions,
   importFromPortal,
+  saveDayMarker,
   saveMonthlyTarget,
+  saveOtherRevenue,
   saveShow,
 } from '@/app/actions'
-import { daysInMonth } from '@/lib/dates'
+import { addMonths, daysInMonth } from '@/lib/dates'
+import type { DayMarker, DayMarkerInput } from '@/lib/markers'
 import type { ImportCandidate, ImportChoice, ImportResult, PortalSuggestion } from '@/lib/portal'
-import type { Category, MonthData, Show, ShowInput, Status } from '@/lib/shows'
+import type {
+  Category,
+  MonthData,
+  OtherRevenueInput,
+  OtherRevenueLine,
+  Show,
+  ShowInput,
+  Status,
+} from '@/lib/shows'
 
 export type DataMode = 'remote' | 'local'
 
@@ -21,9 +36,21 @@ export type DataSource = {
   getPortalSuggestions: (date: string) => Promise<PortalSuggestion[]>
   getImportCandidates: (ym: string) => Promise<ImportCandidate[]>
   importFromPortal: (ym: string, choices: ImportChoice[]) => Promise<ImportResult>
+  saveOtherRevenue: (input: OtherRevenueInput) => Promise<OtherRevenueLine>
+  deleteOtherRevenue: (id: string) => Promise<void>
+  copyOtherRevenue: (ym: string) => Promise<{ copied: number; skipped: number }>
+  getMarkers: (ym: string) => Promise<DayMarker[]>
+  saveMarker: (input: DayMarkerInput) => Promise<DayMarker>
+  deleteMarker: (id: string) => Promise<void>
 }
 
 export const remoteSource: DataSource = {
+  saveOtherRevenue: (input) => saveOtherRevenue(input),
+  deleteOtherRevenue: (id) => deleteOtherRevenue(id),
+  copyOtherRevenue: (ym) => copyOtherRevenueToNextMonth(ym),
+  getMarkers: (ym) => getDayMarkers(ym),
+  saveMarker: (input) => saveDayMarker(input),
+  deleteMarker: (id) => deleteDayMarker(id),
   getMonth: (ym) => getMonthData(ym),
   getPortalSuggestions: (date) => getPortalSuggestions(date),
   getImportCandidates: (ym) => getImportCandidates(ym),
@@ -35,7 +62,12 @@ export const remoteSource: DataSource = {
 
 const STORAGE_KEY = 'sofar-show-calendar-preview-v1'
 
-type LocalState = { shows: Show[]; targets: Record<string, number> }
+type LocalState = {
+  shows: Show[]
+  targets: Record<string, number>
+  otherRevenue: OtherRevenueLine[]
+  markers: DayMarker[]
+}
 
 type Seed = [number, Category, string, string, string, number | null, number | null, number | null, Status]
 
@@ -75,10 +107,16 @@ function seedState(ym: string): LocalState {
       status,
       region: 'LA',
       organizedBy: 'Sofar',
+      venueFee: null,
+      merch: false,
+      revenueType: 'Ticketed',
+      flatFee: null,
       portalEventId: '',
       notes: '',
     })),
     targets: { [ym]: 42000 },
+    otherRevenue: [],
+    markers: [],
   }
 }
 
@@ -86,7 +124,19 @@ function read(seedMonth: string): LocalState {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (raw) {
     try {
-      return JSON.parse(raw) as LocalState
+      const parsed = JSON.parse(raw) as Partial<LocalState> & { shows: Show[]; targets: Record<string, number> }
+      return {
+        ...parsed,
+        shows: parsed.shows.map((s) => ({
+          ...s,
+          venueFee: s.venueFee ?? null,
+          merch: s.merch ?? false,
+          revenueType: s.revenueType ?? 'Ticketed',
+          flatFee: s.flatFee ?? null,
+        })),
+        otherRevenue: parsed.otherRevenue ?? [],
+        markers: parsed.markers ?? [],
+      }
     } catch {
       // fall through and reseed corrupted preview data
     }
@@ -111,7 +161,49 @@ export function createLocalSource(seedMonth: string): DataSource {
       return {
         shows: state.shows.filter((s) => s.date.startsWith(ym)).sort((a, b) => a.date.localeCompare(b.date)),
         target: state.targets[ym] ?? null,
+        otherRevenue: state.otherRevenue.filter((l) => l.month === ym).sort((a, b) => a.label.localeCompare(b.label)),
       }
+    },
+    async saveOtherRevenue(input) {
+      const state = read(seedMonth)
+      const line: OtherRevenueLine = { ...input, id: input.id ?? crypto.randomUUID() }
+      const index = state.otherRevenue.findIndex((l) => l.id === line.id)
+      if (index >= 0) state.otherRevenue[index] = line
+      else state.otherRevenue.push(line)
+      write(state)
+      return line
+    },
+    async deleteOtherRevenue(id) {
+      const state = read(seedMonth)
+      state.otherRevenue = state.otherRevenue.filter((l) => l.id !== id)
+      write(state)
+    },
+    async copyOtherRevenue(ym) {
+      const state = read(seedMonth)
+      const next = addMonths(ym, 1)
+      const existing = new Set(state.otherRevenue.filter((l) => l.month === next).map((l) => l.label.trim().toLowerCase()))
+      const source = state.otherRevenue.filter((l) => l.month === ym)
+      const fresh = source.filter((l) => !existing.has(l.label.trim().toLowerCase()))
+      state.otherRevenue.push(...fresh.map((l) => ({ ...l, id: crypto.randomUUID(), month: next })))
+      write(state)
+      return { copied: fresh.length, skipped: source.length - fresh.length }
+    },
+    async getMarkers(ym) {
+      return read(seedMonth).markers.filter((m) => m.date.startsWith(ym))
+    },
+    async saveMarker(input) {
+      const state = read(seedMonth)
+      const marker: DayMarker = { ...input, id: input.id ?? crypto.randomUUID() }
+      const index = state.markers.findIndex((m) => m.id === marker.id)
+      if (index >= 0) state.markers[index] = marker
+      else state.markers.push(marker)
+      write(state)
+      return marker
+    },
+    async deleteMarker(id) {
+      const state = read(seedMonth)
+      state.markers = state.markers.filter((m) => m.id !== id)
+      write(state)
     },
     async saveShow(input) {
       const state = read(seedMonth)

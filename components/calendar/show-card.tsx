@@ -1,6 +1,8 @@
+import { ShoppingBag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCompact, type Show } from '@/lib/shows'
 import { paceTag, soldLabel, type PortalMatch } from '@/lib/portal'
+import { isFlatFee, isLocalProducer, showRevenue } from '@/lib/revenue'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -17,7 +19,6 @@ function PortalLine({ match, past, className }: { match: PortalMatch; past: bool
     return (
       <span className={cn('flex items-baseline justify-between gap-2 text-[11px] leading-snug tabular-nums', className)}>
         <span className="truncate">{soldLabel(match)}</span>
-        {match.revenue != null && <span className="shrink-0 font-medium">{formatCompact(match.revenue)}</span>}
       </span>
     )
   }
@@ -67,6 +68,9 @@ export function ShowCard({ show, onOpen, match, past = false }: Props) {
   const styles = CATEGORY_STYLES[show.category]
   const cancelled = show.status === 'Cancelled'
   const solid = show.status === 'Confirmed'
+  const flat = isFlatFee(show)
+  const local = isLocalProducer(show)
+  const revenue = showRevenue(show, match, past)
 
   return (
     <button
@@ -85,9 +89,15 @@ export function ShowCard({ show, onOpen, match, past = false }: Props) {
     >
       <span className="flex items-center gap-1.5">
         <span className="block truncate text-sm font-medium leading-snug">{show.format}</span>
-        {show.organizedBy === 'Local Producer' && (
+        {local && (
           <span className="shrink-0 rounded-sm bg-neutral-900/10 px-1 text-[10px] font-semibold leading-tight text-neutral-700">
             LP
+          </span>
+        )}
+        {show.merch && (
+          <span className="shrink-0" title="Merch">
+            <ShoppingBag className="size-3" aria-hidden />
+            <span className="sr-only">Merch</span>
           </span>
         )}
       </span>
@@ -96,11 +106,15 @@ export function ShowCard({ show, onOpen, match, past = false }: Props) {
           {show.venue || show.area || '\u00A0'}
           {show.region !== 'LA' && <span className="text-[11px] opacity-75"> · {show.region}</span>}
         </span>
-        {show.projectedRevenue != null && show.projectedRevenue > 0 && (
-          <span className="shrink-0 tabular-nums">{formatCompact(show.projectedRevenue)}</span>
-        )}
+        {!flat && revenue > 0 && <span className="shrink-0 tabular-nums">{formatCompact(revenue)}</span>}
       </span>
-      {match && <PortalLine match={match} past={past} className={cn('mt-0.5', styles.sub)} />}
+      {flat ? (
+        <span className={cn('mt-0.5 block text-[11px] leading-snug tabular-nums', styles.sub)}>
+          Flat fee {formatCompact(show.flatFee ?? 0)}
+        </span>
+      ) : (
+        !local && match && <PortalLine match={match} past={past} className={cn('mt-0.5', styles.sub)} />
+      )}
     </button>
   )
 }

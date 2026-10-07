@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { buildMonthGrid, formatLongDate, formatShortWeekday, WEEKDAYS } from '@/lib/dates'
 import type { Show } from '@/lib/shows'
 import { isPastShow, portalFor, type PortalMap } from '@/lib/portal'
+import { markersByDate, type DayMarker } from '@/lib/markers'
 import { ShowCard } from './show-card'
 
 type Props = {
@@ -10,8 +11,29 @@ type Props = {
   todayISO: string
   shows: Show[]
   portal?: PortalMap
+  markers: DayMarker[]
   onAdd: (date: string) => void
   onOpen: (show: Show) => void
+}
+
+function MarkerBanners({ markers }: { markers: DayMarker[] | undefined }) {
+  if (!markers?.length) return null
+  return (
+    <div className="flex flex-col gap-0.5">
+      {markers.map((m) => (
+        <span
+          key={m.id}
+          title={m.note || m.label}
+          className={cn(
+            'truncate rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight',
+            m.type === 'event' ? 'bg-amber-100 text-amber-800' : 'bg-neutral-100 text-neutral-500',
+          )}
+        >
+          {m.label}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 function groupByDate(shows: Show[]) {
@@ -37,7 +59,8 @@ function DayNumber({ day, isToday, muted }: { day: number; isToday: boolean; mut
   )
 }
 
-export function MonthGrid({ ym, todayISO, shows, portal, onAdd, onOpen }: Props) {
+export function MonthGrid({ ym, todayISO, shows, portal, markers, onAdd, onOpen }: Props) {
+  const markerMap = markersByDate(ym, markers)
   const renderCard = (show: Show) => (
     <ShowCard
       key={show.id}
@@ -93,6 +116,7 @@ export function MonthGrid({ ym, todayISO, shows, portal, onAdd, onOpen }: Props)
                   !lastRow && 'border-b border-neutral-100',
                 )}
               >
+                <MarkerBanners markers={markerMap.get(cell.iso)} />
                 <div className="flex items-center justify-between">
                   <DayNumber day={cell.day} isToday={isToday} />
                   <button
@@ -127,6 +151,7 @@ export function MonthGrid({ ym, todayISO, shows, portal, onAdd, onOpen }: Props)
                 <DayNumber day={cell.day} isToday={isToday} />
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <MarkerBanners markers={markerMap.get(cell.iso)} />
                 {dayShows.map(renderCard)}
                 <button
                   type="button"
