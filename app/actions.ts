@@ -17,10 +17,24 @@ import {
   DATE_RE,
   isUuid,
   MONTH_RE,
+  validateOtherRevenueInput,
   validateShowInput,
   type MonthData,
+  type OtherRevenueLine,
   type Show,
 } from '@/lib/shows'
+import { validateMarkerInput, type DayMarker } from '@/lib/markers'
+
+const NEW_FIELDS_HINT =
+  'This needs the new database columns/tables. Run scripts/003_add_revenue_and_markers.sql in Supabase, then try again.'
+
+type PgError = { code?: string; message: string }
+type PgResult = { data: unknown; error: PgError | null }
+
+function writeError(error: PgError) {
+  if (error.code === '42P01' || error.code === 'PGRST205') return new Error(NEW_FIELDS_HINT)
+  return new Error(error.message)
+}
 
 type ShowRow = {
   id: string
@@ -35,24 +49,60 @@ type ShowRow = {
   status: Show['status']
   region: Show['region']
   organized_by: Show['organizedBy']
+  venue_fee: number | string | null
+  merch: boolean | null
+  revenue_type: Show['revenueType'] | null
+  flat_fee: number | string | null
   portal_event_id: string | null
   notes: string | null
 }
 
 const BASE_SHOW_COLUMNS =
   'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, portal_event_id, notes'
-const SHOW_COLUMNS = `${BASE_SHOW_COLUMNS}, region, organized_by`
+const REGION_SHOW_COLUMNS = `${BASE_SHOW_COLUMNS}, region, organized_by`
+const SHOW_COLUMNS = `${REGION_SHOW_COLUMNS}, venue_fee, merch, revenue_type, flat_fee`
 
 const toNum = (v: number | string | null) => (v == null ? null : Number(v))
 
-// The region/organized_by columns are added by scripts/002_add_region_organized_by.sql.
-// Until that migration runs, fall back to the base column set so the app keeps working
-// and simply defaults those two fields instead of erroring.
-function isMissingNewColumns(error: { code?: string; message?: string } | null) {
+// Newer columns come from scripts/002 and scripts/003. Until those migrations run, retry with
+// the older column sets so the app keeps working and just defaults the missing fields.
+type ColumnTier = { columns: string; omit: string[] }
+const REVENUE_COLUMNS = ['venue_fee', 'merch', 'revenue_type', 'flat_fee']
+const COLUMN_TIERS: ColumnTier[] = [
+  { columns: SHOW_COLUMNS, omit: [] },
+  { columns: REGION_SHOW_COLUMNS, omit: REVENUE_COLUMNS },
+  { columns: BASE_SHOW_COLUMNS, omit: [...REVENUE_COLUMNS, 'region', 'organized_by'] },
+]
+
+function isMissingColumns(error: PgError | null) {
   if (!error) return false
-  if (error.code === '42703') return true
-  const msg = error.message ?? ''
-  return msg.includes('region') || msg.includes('organized_by')
+  if (error.code === '42703' || error.code === 'PGRST204') return true
+  return /region|organized_by|venue_fee|merch|revenue_type|flat_fee/.test(error.message)
+}
+
+async function runTiers(
+  run: (tier: ColumnTier) => PromiseLike<PgResult>,
+  tiers: ColumnTier[] = COLUMN_TIERS,
+): Promise<PgResult> {
+  let result: PgResult = { data: null, error: null }
+  for (const tier of tiers) {
+    result = await run(tier)
+    if (!isMissingColumns(result.error)) return result
+  }
+  return result
+}
+
+function omitKeys(row: Record<string, unknown>, keys: string[]) {
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key)))
+}
+
+function todayInLosAngeles() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
 }
 
 function fromRow(row: ShowRow): Show {
@@ -69,6 +119,10 @@ function fromRow(row: ShowRow): Show {
     status: row.status,
     region: row.region ?? 'LA',
     organizedBy: row.organized_by ?? 'Sofar',
+    venueFee: toNum(row.venue_fee),
+    merch: row.merch === true,
+    revenueType: row.revenue_type ?? 'Ticketed',
+    flatFee: toNum(row.flat_fee),
     portalEventId: row.portal_event_id ?? '',
     notes: row.notes ?? '',
   }
@@ -108,42 +162,148 @@ export async function getMonthData(ym: string): Promise<MonthData> {
   const { start, end } = monthBounds(ym)
   const supabase = getSupabaseAdmin()
 
-  let [showsRes, targetRes] = await Promise.all([
-    supabase
-      .from('shows')
-      .select(SHOW_COLUMNS)
-      .gte('show_date', start)
-      .lt('show_date', end)
-      .order('show_date')
-      .order('created_at'),
+  const [showsRes, targetRes, otherRevenue] = await Promise.all([
+    runTiers((tier) =>
+      supabase
+        .from('shows')
+        .select(tier.columns)
+        .gte('show_date', start)
+        .lt('show_date', end)
+        .order('show_date')
+        .order('created_at'),
+    ),
     supabase.from('monthly_targets').select('target').eq('month', start).maybeSingle(),
+    readOtherRevenue(ym),
   ])
-  let showsData: unknown = showsRes.data
-  let showsError = showsRes.error
-  if (showsError && isMissingNewColumns(showsError)) {
-    const fallback = await supabase
-      .from('shows')
-      .select(BASE_SHOW_COLUMNS)
-      .gte('show_date', start)
-      .lt('show_date', end)
-      .order('show_date')
-      .order('created_at')
-    showsData = fallback.data
-    showsError = fallback.error
-  }
-  if (showsError) throw new Error(showsError.message)
+  if (showsRes.error) throw new Error(showsRes.error.message)
   if (targetRes.error) throw new Error(targetRes.error.message)
 
-  const shows = ((showsData ?? []) as ShowRow[]).map(fromRow)
+  const shows = ((showsRes.data ?? []) as ShowRow[]).map(fromRow)
   const eventIds = [...new Set(shows.map((s) => s.portalEventId.trim()).filter(Boolean))]
   const [portal, portalSyncedAt] = await Promise.all([readPortalMatches(eventIds), readLatestPortalSync()])
 
   return {
     shows,
     target: targetRes.data ? Number(targetRes.data.target) : null,
+    otherRevenue,
     portal,
     portalSyncedAt,
   }
+}
+
+type OtherRevenueRow = { id: string; month: string; label: string; amount: number | string }
+
+const fromOtherRevenueRow = (row: OtherRevenueRow): OtherRevenueLine => ({
+  id: row.id,
+  month: row.month.slice(0, 7),
+  label: row.label,
+  amount: Number(row.amount),
+})
+
+// Reads degrade to an empty list until scripts/003 has created the table.
+async function readOtherRevenue(ym: string): Promise<OtherRevenueLine[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from('monthly_other_revenue')
+    .select('id, month, label, amount')
+    .eq('month', `${ym}-01`)
+    .order('label')
+  if (error) {
+    console.error('Could not read monthly_other_revenue:', error.message)
+    return []
+  }
+  return ((data ?? []) as OtherRevenueRow[]).map(fromOtherRevenueRow)
+}
+
+export async function saveOtherRevenue(raw: unknown): Promise<OtherRevenueLine> {
+  await requireAccess()
+  const input = validateOtherRevenueInput(raw)
+  const row = { month: `${input.month}-01`, label: input.label, amount: input.amount }
+  const supabase = getSupabaseAdmin()
+  const query = input.id
+    ? supabase.from('monthly_other_revenue').update(row).eq('id', input.id)
+    : supabase.from('monthly_other_revenue').insert(row)
+  const { data, error } = await query.select('id, month, label, amount').single()
+  if (error) throw writeError(error)
+  return fromOtherRevenueRow(data as OtherRevenueRow)
+}
+
+export async function deleteOtherRevenue(id: unknown): Promise<void> {
+  await requireAccess()
+  if (!isUuid(id)) throw new Error('Invalid id')
+  const { error } = await getSupabaseAdmin().from('monthly_other_revenue').delete().eq('id', id)
+  if (error) throw writeError(error)
+}
+
+export async function copyOtherRevenueToNextMonth(ym: string): Promise<{ copied: number; skipped: number }> {
+  await requireAccess()
+  assertMonth(ym)
+  const { start, end } = monthBounds(ym)
+  const supabase = getSupabaseAdmin()
+
+  const [fromRes, toRes] = await Promise.all([
+    supabase.from('monthly_other_revenue').select('label, amount').eq('month', start),
+    supabase.from('monthly_other_revenue').select('label').eq('month', end),
+  ])
+  if (fromRes.error) throw writeError(fromRes.error)
+  if (toRes.error) throw writeError(toRes.error)
+
+  const existing = new Set(((toRes.data ?? []) as { label: string }[]).map((r) => r.label.trim().toLowerCase()))
+  const rows = ((fromRes.data ?? []) as { label: string; amount: number | string }[])
+    .filter((r) => !existing.has(r.label.trim().toLowerCase()))
+    .map((r) => ({ month: end, label: r.label, amount: Number(r.amount) }))
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('monthly_other_revenue').insert(rows)
+    if (error) throw writeError(error)
+  }
+  return { copied: rows.length, skipped: (fromRes.data?.length ?? 0) - rows.length }
+}
+
+type MarkerRow = { id: string; date: string; label: string; type: DayMarker['type']; note: string | null }
+
+const fromMarkerRow = (row: MarkerRow): DayMarker => ({
+  id: row.id,
+  date: row.date,
+  label: row.label,
+  type: row.type,
+  note: row.note ?? '',
+})
+
+export async function getDayMarkers(ym: string): Promise<DayMarker[]> {
+  await requireAccess()
+  assertMonth(ym)
+  const { start, end } = monthBounds(ym)
+  const { data, error } = await getSupabaseAdmin()
+    .from('day_markers')
+    .select('id, date, label, type, note')
+    .gte('date', start)
+    .lt('date', end)
+    .order('date')
+  if (error) {
+    console.error('Could not read day_markers:', error.message)
+    return []
+  }
+  return ((data ?? []) as MarkerRow[]).map(fromMarkerRow)
+}
+
+export async function saveDayMarker(raw: unknown): Promise<DayMarker> {
+  await requireAccess()
+  const input = validateMarkerInput(raw)
+  const row = { date: input.date, label: input.label, type: input.type, note: input.note || null }
+  const supabase = getSupabaseAdmin()
+  const query = input.id
+    ? supabase.from('day_markers').update(row).eq('id', input.id)
+    : supabase.from('day_markers').insert(row)
+  const { data, error } = await query.select('id, date, label, type, note').single()
+  if (error) throw writeError(error)
+  return fromMarkerRow(data as MarkerRow)
+}
+
+export async function deleteDayMarker(id: unknown): Promise<void> {
+  await requireAccess()
+  if (!isUuid(id)) throw new Error('Invalid id')
+  const { error } = await getSupabaseAdmin().from('day_markers').delete().eq('id', id)
+  if (error) throw writeError(error)
 }
 
 type PortalEventRow = {
@@ -257,6 +417,7 @@ type ImportEventRow = {
   venue: string | null
   tickets_available: number | string | null
   organized_as: string | null
+  revenue_cents: number | string | null
 }
 
 type UnlinkedShowRow = {
@@ -274,7 +435,7 @@ async function findImportCandidates(ym: string): Promise<ImportCandidate[]> {
 
   const eventsRes = await supabase
     .from('portal_events')
-    .select('event_id, show_date, venue, tickets_available, organized_as')
+    .select('event_id, show_date, venue, tickets_available, organized_as, revenue_cents')
     .eq('status', 'published')
     .gte('show_date', start)
     .lt('show_date', end)
@@ -324,12 +485,17 @@ async function findImportCandidates(ym: string): Promise<ImportCandidate[]> {
     }
   }
 
+  const today = todayInLosAngeles()
   const candidates: ImportCandidate[] = []
   for (const event of events) {
     if (linkedIds.has(event.event_id)) continue
     // Each existing show can be offered to only one event.
     const match = unlinkedByDate.get(event.show_date)?.shift()
-    const cents = projectedCents.get(event.event_id)
+    let cents = projectedCents.get(event.event_id)
+    // A past event with no projection takes its actual revenue as the projected revenue.
+    if (cents == null && event.show_date < today && event.revenue_cents != null) {
+      cents = Number(event.revenue_cents)
+    }
     candidates.push({
       eventId: event.event_id,
       date: event.show_date,
@@ -404,12 +570,9 @@ export async function importFromPortal(ym: string, raw: unknown): Promise<Import
       portal_event_id: c.eventId,
       notes: 'Imported from portal. Check format and price.',
     }))
-    let { error } = await supabase.from('shows').insert(rows)
-    if (error && isMissingNewColumns(error)) {
-      ;({ error } = await supabase
-        .from('shows')
-        .insert(rows.map(({ region, organized_by, ...base }) => base)))
-    }
+    const { error } = await runTiers((tier) =>
+      supabase.from('shows').insert(rows.map((row) => omitKeys(row, tier.omit))),
+    )
     if (error) throw new Error(error.message)
     result.created = rows.length
   }
@@ -444,6 +607,10 @@ export async function saveShow(raw: unknown): Promise<Show> {
     status: input.status,
     region: input.region,
     organized_by: input.organizedBy,
+    venue_fee: input.venueFee,
+    merch: input.merch,
+    revenue_type: input.revenueType,
+    flat_fee: input.flatFee,
     portal_event_id: input.portalEventId || null,
     notes: input.notes || null,
   }
@@ -455,12 +622,13 @@ export async function saveShow(raw: unknown): Promise<Show> {
     return query.select(columns).single()
   }
 
-  let { data, error } = await runSave(row, SHOW_COLUMNS)
-  if (error && isMissingNewColumns(error)) {
-    const { region, organized_by, ...baseRow } = row
-    ;({ data, error } = await runSave(baseRow, BASE_SHOW_COLUMNS))
-  }
-  if (error) throw new Error(error.message)
+  // Don't silently drop real revenue-field values if the migration hasn't run yet.
+  const usesNewFields = input.revenueType === 'Flat fee' || input.merch || input.venueFee != null
+  const { data, error } = await runTiers(
+    (tier) => runSave(omitKeys(row, tier.omit), tier.columns),
+    usesNewFields ? COLUMN_TIERS.slice(0, 1) : COLUMN_TIERS,
+  )
+  if (error) throw usesNewFields && isMissingColumns(error) ? new Error(NEW_FIELDS_HINT) : new Error(error.message)
   return fromRow(data as unknown as ShowRow)
 }
 

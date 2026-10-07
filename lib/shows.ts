@@ -12,6 +12,9 @@ export type Region = (typeof REGIONS)[number]
 export const ORGANIZERS = ['Sofar', 'Local Producer'] as const
 export type Organizer = (typeof ORGANIZERS)[number]
 
+export const REVENUE_TYPES = ['Ticketed', 'Flat fee'] as const
+export type RevenueType = (typeof REVENUE_TYPES)[number]
+
 export const FORMATS: Record<Category, readonly string[]> = {
   Core: [
     'Discovery',
@@ -60,15 +63,29 @@ export type Show = {
   status: Status
   region: Region
   organizedBy: Organizer
+  venueFee: number | null
+  merch: boolean
+  revenueType: RevenueType
+  flatFee: number | null
   portalEventId: string
   notes: string
 }
 
 export type ShowInput = Omit<Show, 'id'> & { id?: string }
 
+export type OtherRevenueLine = {
+  id: string
+  month: string
+  label: string
+  amount: number
+}
+
+export type OtherRevenueInput = Omit<OtherRevenueLine, 'id'> & { id?: string }
+
 export type MonthData = {
   shows: Show[]
   target: number | null
+  otherRevenue: OtherRevenueLine[]
   portal?: PortalMap
   portalSyncedAt?: string | null
 }
@@ -117,6 +134,12 @@ export function validateShowInput(raw: unknown): ShowInput {
   const organizedBy = (r.organizedBy as Organizer) ?? 'Sofar'
   if (!ORGANIZERS.includes(organizedBy)) throw new Error('Pick who organized this show')
 
+  const revenueType = (r.revenueType as RevenueType) ?? 'Ticketed'
+  if (!REVENUE_TYPES.includes(revenueType)) throw new Error('Pick a revenue type')
+
+  const flatFee = cleanNumber(r.flatFee)
+  if (revenueType === 'Flat fee' && flatFee == null) throw new Error('Enter the flat fee amount')
+
   return {
     id: r.id === undefined ? undefined : isUuid(r.id) ? r.id : (() => { throw new Error('Invalid id') })(),
     date,
@@ -130,23 +153,48 @@ export function validateShowInput(raw: unknown): ShowInput {
     tickets: cleanNumber(r.tickets, { integer: true, max: 100_000 }),
     ticketPrice: cleanNumber(r.ticketPrice, { max: 100_000 }),
     projectedRevenue: cleanNumber(r.projectedRevenue),
+    venueFee: cleanNumber(r.venueFee),
+    merch: r.merch === true,
+    revenueType,
+    flatFee,
     portalEventId: cleanText(r.portalEventId, 120),
     notes: cleanText(r.notes, 4000),
   }
 }
 
-export function summarize(shows: Show[], target: number | null) {
+export function validateOtherRevenueInput(raw: unknown): OtherRevenueInput {
+  if (!raw || typeof raw !== 'object') throw new Error('Invalid revenue line')
+  const r = raw as Record<string, unknown>
+  const month = typeof r.month === 'string' && MONTH_RE.test(r.month) ? r.month : null
+  if (!month) throw new Error('Invalid month')
+  const label = cleanText(r.label, 120)
+  if (!label) throw new Error('Add a label')
+  const amount = cleanNumber(r.amount)
+  if (amount == null) throw new Error('Enter an amount')
+  return {
+    id: r.id === undefined ? undefined : isUuid(r.id) ? r.id : (() => { throw new Error('Invalid id') })(),
+    month,
+    label,
+    amount,
+  }
+}
+
+export function plannedRevenue(show: Show): number {
+  if (show.status === 'Cancelled') return 0
+  if (show.revenueType === 'Flat fee') return show.flatFee ?? 0
+  return show.projectedRevenue ?? 0
+}
+
+export function summarize(shows: Show[], target: number | null, otherRevenue = 0) {
   const active = shows.filter((s) => s.status !== 'Cancelled')
-  const planned = active.reduce((sum, s) => sum + (s.projectedRevenue ?? 0), 0)
-  const confirmed = active
-    .filter((s) => s.status === 'Confirmed')
-    .reduce((sum, s) => sum + (s.projectedRevenue ?? 0), 0)
+  const planned = active.reduce((sum, s) => sum + plannedRevenue(s), 0)
+  const confirmed = active.filter((s) => s.status === 'Confirmed').reduce((sum, s) => sum + plannedRevenue(s), 0)
   return {
     planned,
     confirmed,
     count: active.length,
     average: active.length ? planned / active.length : null,
-    variance: target == null ? null : planned - target,
+    variance: target == null ? null : planned + otherRevenue - target,
   }
 }
 

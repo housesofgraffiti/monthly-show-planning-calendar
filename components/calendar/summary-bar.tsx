@@ -2,15 +2,22 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { formatCurrency, summarize, type Show } from '@/lib/shows'
-import { portalTotals, type PortalMap } from '@/lib/portal'
+import { formatCurrency, summarize, type OtherRevenueInput, type OtherRevenueLine, type Show } from '@/lib/shows'
+import type { PortalMap } from '@/lib/portal'
+import { revenueTotals } from '@/lib/revenue'
+import { OtherRevenuePanel } from './other-revenue-panel'
 
 type Props = {
+  ym: string
   shows: Show[]
   target: number | null
+  otherRevenue: OtherRevenueLine[]
   portal?: PortalMap
   todayISO: string
   onSaveTarget: (value: number) => Promise<void>
+  onSaveOther: (input: OtherRevenueInput) => Promise<void>
+  onDeleteOther: (id: string) => Promise<void>
+  onCopyOther: () => Promise<{ copied: number; skipped: number }>
 }
 
 function Stat({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
@@ -80,12 +87,25 @@ function TargetEditor({ target, onSave }: { target: number | null; onSave: (v: n
   )
 }
 
-export function SummaryBar({ shows, target, portal, todayISO, onSaveTarget }: Props) {
-  const s = summarize(shows, target)
+export function SummaryBar({
+  ym,
+  shows,
+  target,
+  otherRevenue,
+  portal,
+  todayISO,
+  onSaveTarget,
+  onSaveOther,
+  onDeleteOther,
+  onCopyOther,
+}: Props) {
+  const otherTotal = otherRevenue.reduce((sum, l) => sum + l.amount, 0)
+  const s = summarize(shows, target, otherTotal)
   const variance = s.variance
-  const totals = portalTotals(shows, portal, todayISO)
+  const totals = revenueTotals(shows, portal, todayISO)
 
   return (
+    <div className="flex flex-col gap-4">
     <section
       aria-label="Monthly summary"
       className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 sm:grid-cols-4"
@@ -99,7 +119,7 @@ export function SummaryBar({ shows, target, portal, todayISO, onSaveTarget }: Pr
       <Stat label="Confirmed" hint="Confirmed only">
         {formatCurrency(s.confirmed)}
       </Stat>
-      <Stat label="Over / (under)" hint="Planned vs. target">
+      <Stat label="Over / (under)" hint="Planned + other vs. target">
         {variance == null ? (
           <span className="text-neutral-300">—</span>
         ) : (
@@ -121,5 +141,7 @@ export function SummaryBar({ shows, target, portal, todayISO, onSaveTarget }: Pr
         {formatCurrency(totals.projected)}
       </Stat>
     </section>
+    <OtherRevenuePanel ym={ym} lines={otherRevenue} onSave={onSaveOther} onDelete={onDeleteOther} onCopy={onCopyOther} />
+    </div>
   )
 }
