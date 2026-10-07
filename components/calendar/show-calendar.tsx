@@ -39,16 +39,12 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
     keepPreviousData: true,
   })
 
-  const { data: discoveryActuals, error: discoveryError } = useSWR(
-    ['discovery-actuals', mode, todayISO],
-    () => source.getDiscoveryActuals(),
+  const { data: typicalStat, error: typicalError } = useSWR(
+    ['typical-discovery', mode],
+    () => source.getTypicalDiscoveryRevenue(),
     { revalidateOnFocus: false },
   )
-  const typical = discoveryActuals
-    ? typicalDiscovery(discoveryActuals)
-    : discoveryError
-      ? typicalDiscovery([])
-      : null
+  const typical = typicalStat !== undefined ? typicalDiscovery(typicalStat) : typicalError ? typicalDiscovery(null) : null
 
   const shows = data?.shows ?? []
   const target = data?.target ?? null

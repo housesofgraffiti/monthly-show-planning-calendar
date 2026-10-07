@@ -7,9 +7,9 @@ export const EXPECTED_VALUE_WEIGHTS = {
   Idea: 0.3,
 } as const
 
-// "About N more Discovery shows" divides the gap by the typical Discovery revenue.
-// The typical value is the average actual revenue of recent Discovery shows. With fewer
-// than DISCOVERY_MIN_SAMPLE of them, this default is used instead.
+// "About N more Discovery shows" divides the gap by the typical Discovery revenue, read from
+// planning_stats ('typical_discovery_revenue', in dollars). This default is used when that row is missing.
 export const DEFAULT_DISCOVERY_REVENUE = 1900
-export const DISCOVERY_MIN_SAMPLE = 5
-export const DISCOVERY_LOOKBACK_DAYS = 90
+
+// The window planning_stats averages over, shown in the note under the gap.
+export const TYPICAL_DISCOVERY_WINDOW_DAYS = 180

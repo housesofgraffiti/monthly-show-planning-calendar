@@ -21,6 +21,9 @@ const EMPTY_CELLS = {
   projTickets: null as number | null,
   projRange: '',
   projRev: null as number | null,
+  revRange: '',
+  confidence: '',
+  sellout: '',
   pace: '',
 }
 
@@ -36,6 +39,12 @@ function portalCells(show: Show, m: PortalMatch | undefined) {
     projTickets: !revenueOnly && p?.tickets != null ? Math.round(p.tickets) : null,
     projRange: !revenueOnly && p ? (rangeLabel(p, '–') ?? '') : '',
     projRev: p?.revenue != null ? p.revenue : null,
+    revRange:
+      p?.revenueLow != null && p.revenueHigh != null
+        ? `${formatCurrency(p.revenueLow)} – ${formatCurrency(p.revenueHigh)}`
+        : '',
+    confidence: !revenueOnly && p?.confidence ? capitalize(p.confidence) : '',
+    sellout: !revenueOnly && p?.selloutLikely ? 'Yes' : '',
     pace: !revenueOnly && p?.paceLabel ? capitalize(p.paceLabel) : '',
   }
 }
@@ -70,6 +79,9 @@ function exportCsv(ym: string, todayISO: string, shows: Show[], portal: PortalMa
     'Proj. Tickets',
     'Proj. Range',
     'Proj. Rev',
+    'Rev. Range',
+    'Confidence',
+    'Sellout',
     'Pace',
   ]
   const rows = shows.map((s) => {
@@ -99,6 +111,9 @@ function exportCsv(ym: string, todayISO: string, shows: Show[], portal: PortalMa
     c.projTickets ?? '',
     c.projRange,
     c.projRev ?? '',
+    c.revRange,
+    c.confidence,
+    c.sellout,
     c.pace,
     ]
   })
@@ -136,7 +151,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-200">
-        <table className="w-full min-w-[2200px] border-collapse text-sm">
+        <table className="w-full min-w-[2600px] border-collapse text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50/60">
             <tr>
               <th className={th}>Date</th>
@@ -162,13 +177,16 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
               <th className={cn(th, 'text-right')}>Proj. Tickets</th>
               <th className={cn(th, 'text-right')}>Proj. Range</th>
               <th className={cn(th, 'text-right')}>Proj. Rev</th>
+              <th className={cn(th, 'text-right')}>Rev. Range</th>
+              <th className={th}>Confidence</th>
+              <th className={th}>Sellout</th>
               <th className={th}>Pace</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={24} className="px-3 py-10 text-center text-neutral-400">
+                <td colSpan={27} className="px-3 py-10 text-center text-neutral-400">
                   No shows this month.
                 </td>
               </tr>
@@ -233,6 +251,20 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
                   <td className={num}>{c.projTickets ?? ''}</td>
                   <td className={num}>{c.projRange}</td>
                   <td className={num}>{c.projRev != null ? formatCurrency(c.projRev) : ''}</td>
+                  <td className={num}>{c.revRange}</td>
+                  <td className={cn(td, 'whitespace-nowrap', cancelled && 'line-through', c.confidence === 'Low' && 'text-neutral-500')}>
+                    {c.confidence}
+                  </td>
+                  <td
+                    className={cn(
+                      td,
+                      'whitespace-nowrap',
+                      cancelled && 'line-through',
+                      !cancelled && c.sellout && 'font-medium text-amber-700',
+                    )}
+                  >
+                    {c.sellout}
+                  </td>
                   <td
                     className={cn(
                       td,
@@ -257,7 +289,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
                 <td className={cn(td, 'text-right tabular-nums')}>{totalTickets}</td>
                 <td className={td} colSpan={2} />
                 <td className={cn(td, 'text-right tabular-nums')}>{formatCurrency(totalRevenue)}</td>
-                <td className={td} colSpan={8} />
+                <td className={td} colSpan={11} />
               </tr>
             </tfoot>
           )}

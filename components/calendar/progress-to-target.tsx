@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/shows'
 import { showsToGo, type PlanningSummary, type TypicalDiscovery } from '@/lib/planning'
-import { DISCOVERY_LOOKBACK_DAYS } from '@/lib/planning-config'
+import { TYPICAL_DISCOVERY_WINDOW_DAYS } from '@/lib/planning-config'
 
 type Segment = { key: string; label: string; value: number; className: string; style?: CSSProperties }
 
@@ -33,9 +33,7 @@ function GapText({ summary, typical }: { summary: PlanningSummary; typical: Typi
       {typical && (
         <p className="text-xs text-neutral-400">
           Typical Discovery show {formatCurrency(typical.value)}
-          {typical.isDefault
-            ? ` (default estimate, ${typical.sample} recent with results)`
-            : ` (average of ${typical.sample} shows, last ${DISCOVERY_LOOKBACK_DAYS} days)`}
+          {typical.isDefault ? ' (default estimate)' : ` (last ${TYPICAL_DISCOVERY_WINDOW_DAYS} days)`}
         </p>
       )}
     </div>

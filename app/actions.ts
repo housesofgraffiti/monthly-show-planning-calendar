@@ -4,9 +4,9 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { ACCESS_COOKIE, accessTokenFor, hasTeamAccess, safeEqual } from '@/lib/team-access'
-import { addDays, monthBounds } from '@/lib/dates'
+import { monthBounds } from '@/lib/dates'
 import {
-  portalFor,
+  resolveConfidence,
   type ImportCandidate,
   type ImportChoice,
   type ImportResult,
@@ -14,8 +14,6 @@ import {
   type PortalMatch,
   type PortalSuggestion,
 } from '@/lib/portal'
-import { DISCOVERY_LOOKBACK_DAYS } from '@/lib/planning-config'
-import { isFlatFee, isLocalProducer } from '@/lib/revenue'
 import {
   DATE_RE,
   isUuid,
@@ -194,36 +192,20 @@ export async function getMonthData(ym: string): Promise<MonthData> {
   }
 }
 
-// Actual revenue of every past Discovery-format, Ticketed, non-Local-Producer show in the
-// lookback window that has portal results. The client averages these into "typical Discovery".
-export async function getDiscoveryActuals(): Promise<number[]> {
+// planning_stats is read-only here. Returns dollars, or null when the row is missing or unreadable
+// so the client falls back to the config default.
+export async function getTypicalDiscoveryRevenue(): Promise<number | null> {
   await requireAccess()
-  const today = todayInLosAngeles()
-  const since = addDays(today, -DISCOVERY_LOOKBACK_DAYS)
-  const supabase = getSupabaseAdmin()
-
-  const res = await runTiers((tier) =>
-    supabase
-      .from('shows')
-      .select(tier.columns)
-      .gte('show_date', since)
-      .lt('show_date', today)
-      .ilike('format', 'Discovery%')
-      .neq('status', 'Cancelled'),
-  )
-  if (res.error) throw new Error(res.error.message)
-
-  const shows = ((res.data ?? []) as ShowRow[])
-    .map(fromRow)
-    .filter((show) => !isFlatFee(show) && !isLocalProducer(show) && show.portalEventId.trim())
-  const portal = await readPortalMatches([...new Set(shows.map((s) => s.portalEventId.trim()))])
-
-  const actuals: number[] = []
-  for (const show of shows) {
-    const match = portalFor(show, portal)
-    if (match?.hasEvent && match.revenue != null) actuals.push(match.revenue)
+  const { data, error } = await getSupabaseAdmin()
+    .from('planning_stats')
+    .select('value')
+    .eq('key', 'typical_discovery_revenue')
+    .maybeSingle()
+  if (error) {
+    console.error('Could not read planning_stats:', error.message)
+    return null
   }
-  return actuals
+  return toNum((data as { value: number | string | null } | null)?.value ?? null)
 }
 
 type OtherRevenueRow = { id: string; month: string; label: string; amount: number | string }
@@ -355,7 +337,11 @@ type ProjectionRow = {
   low: number | string | null
   high: number | string | null
   projected_revenue_cents: number | string | null
+  revenue_low_cents: number | string | null
+  revenue_high_cents: number | string | null
   confidence: string | null
+  confidence_tier: string | null
+  sellout_likely: boolean | null
   pace_label: string | null
   computed_at: string | null
 }
@@ -377,7 +363,9 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
       .order('synced_at', { ascending: false, nullsFirst: false }),
     supabase
       .from('projections')
-      .select('event_id, projected_tickets, low, high, projected_revenue_cents, confidence, pace_label, computed_at')
+      .select(
+        'event_id, projected_tickets, low, high, projected_revenue_cents, revenue_low_cents, revenue_high_cents, confidence, confidence_tier, sellout_likely, pace_label, computed_at',
+      )
       .in('event_id', eventIds)
       .order('computed_at', { ascending: false, nullsFirst: false }),
   ])
@@ -404,7 +392,10 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
       low: toNum(row.low),
       high: toNum(row.high),
       revenue: centsToDollars(row.projected_revenue_cents),
-      confidence: row.confidence,
+      revenueLow: centsToDollars(row.revenue_low_cents),
+      revenueHigh: centsToDollars(row.revenue_high_cents),
+      confidence: resolveConfidence(row.confidence_tier, row.confidence),
+      selloutLikely: row.sellout_likely === true,
       paceLabel: row.pace_label,
       computedAt: row.computed_at,
     }
