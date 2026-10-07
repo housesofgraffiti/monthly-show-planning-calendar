@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { monthTitle } from '@/lib/dates'
-import { CATEGORIES } from '@/lib/shows'
+import { CATEGORIES, statusLabel } from '@/lib/shows'
 import { isStale, timeAgo } from '@/lib/portal'
 import { CATEGORY_STYLES } from './category-styles'
 
@@ -108,7 +108,7 @@ export function Legend({
         <li className="hidden h-4 w-px bg-neutral-200 sm:block" aria-hidden />
         <li className="flex items-center gap-2">
           <span className="h-3.5 w-5 rounded border border-neutral-400" aria-hidden />
-          Confirmed
+          {statusLabel('Confirmed')}
         </li>
         <li className="flex items-center gap-2">
           <span className="h-3.5 w-5 rounded border border-dashed border-neutral-400" aria-hidden />

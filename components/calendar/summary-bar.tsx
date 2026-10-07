@@ -139,10 +139,13 @@ export function SummaryBar({
           <Stat size="lg" label="Target" hint="Click to edit">
             <TargetEditor key={target ?? 'none'} target={target} onSave={onSaveTarget} />
           </Stat>
-          <Stat size="lg" label="Projected" hint="Everything at full value, with other revenue">
-            {formatCurrency(s.projected)}
+          <Stat size="lg" label="Locked in" hint="Real money: actuals, sold, flat fees, other revenue">
+            {formatCurrency(s.lockedIn)}
           </Stat>
-          <Stat size="lg" label="Over / (under)" hint="Projected minus target">
+          <Stat size="lg" label="Projected total" hint="Locked in plus projected remaining">
+            {formatCurrency(s.projectedTotal)}
+          </Stat>
+          <Stat size="lg" label="Over / (under)" hint="Projected total minus target">
             {s.variance == null ? (
               <span className="text-neutral-300">—</span>
             ) : (
@@ -151,25 +154,26 @@ export function SummaryBar({
               </span>
             )}
           </Stat>
-          <Stat
-            size="lg"
-            label="Expected"
-            hint={`Tentative at ${percent(EXPECTED_VALUE_WEIGHTS.Tentative)}, Idea at ${percent(EXPECTED_VALUE_WEIGHTS.Idea)}`}
-          >
-            {formatCurrency(s.expected)}
-          </Stat>
         </div>
 
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 sm:grid-cols-3 lg:grid-cols-5">
-          <Stat size="sm" label="Actual to date" hint="Past shows">
-            {formatCurrency(s.actual)}
+        <div
+          className={cn(
+            'grid gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200',
+            s.tentativeCount > 0 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3',
+          )}
+        >
+          <Stat size="sm" label="Projected remaining" hint="Not yet sold, shows on sale">
+            {formatCurrency(s.projectedRemaining)}
           </Stat>
-          <Stat size="sm" label="Confirmed" hint="Upcoming, confirmed">
-            {formatCurrency(s.confirmed)}
-          </Stat>
-          <Stat size="sm" label="Other revenue" hint="Sponsorships this month">
-            {formatCurrency(s.other)}
-          </Stat>
+          {s.tentativeCount > 0 && (
+            <Stat
+              size="sm"
+              label="Expected"
+              hint={`Projected total, with Tentative at ${percent(EXPECTED_VALUE_WEIGHTS.Tentative)} and Idea at ${percent(EXPECTED_VALUE_WEIGHTS.Idea)}`}
+            >
+              {formatCurrency(s.expected)}
+            </Stat>
+          )}
           <Stat size="sm" label="Shows" hint="Non-cancelled">
             {s.count}
           </Stat>

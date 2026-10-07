@@ -1,9 +1,9 @@
 import { Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatLongDate, formatShortWeekday } from '@/lib/dates'
-import { formatCurrency, type Show } from '@/lib/shows'
-import { capitalize, portalFor, rangeLabel, sellThrough, type PortalMap, type PortalMatch } from '@/lib/portal'
-import { isFlatFee, isLocalProducer, showRevenueOn } from '@/lib/revenue'
+import { formatCurrency, statusLabel, type Show } from '@/lib/shows'
+import { capitalize, isPastShow, portalFor, rangeLabel, sellThrough, type PortalMap, type PortalMatch } from '@/lib/portal'
+import { isFlatFee, isLocalProducer, showMoney, showRevenueOn } from '@/lib/revenue'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -49,6 +49,10 @@ function portalCells(show: Show, m: PortalMatch | undefined) {
   }
 }
 
+function lockedInFor(show: Show, portal: PortalMap | undefined, todayISO: string) {
+  return showMoney(show, portalFor(show, portal), isPastShow(show, todayISO)).lockedIn
+}
+
 function csvCell(value: string | number) {
   const s = String(value)
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
@@ -75,6 +79,7 @@ function exportCsv(ym: string, todayISO: string, shows: Show[], portal: PortalMa
     'Status',
     'Sold',
     'Sell-through %',
+    'Locked In',
     'Actual Rev',
     'Proj. Tickets',
     'Proj. Range',
@@ -104,9 +109,10 @@ function exportCsv(ym: string, todayISO: string, shows: Show[], portal: PortalMa
     flat ? '' : (s.ticketPrice ?? ''),
     flat ? '' : (s.projectedRevenue ?? ''),
     showRevenueOn(s, portal, todayISO),
-    s.status,
+    statusLabel(s.status),
     c.sold,
     c.sellThrough,
+    lockedInFor(s, portal, todayISO),
     c.actualRev ?? '',
     c.projTickets ?? '',
     c.projRange,
@@ -151,7 +157,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-200">
-        <table className="w-full min-w-[2600px] border-collapse text-sm">
+        <table className="w-full min-w-[2700px] border-collapse text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50/60">
             <tr>
               <th className={th}>Date</th>
@@ -173,6 +179,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
               <th className={th}>Status</th>
               <th className={cn(th, 'text-right')}>Sold</th>
               <th className={cn(th, 'text-right')}>Sell-through %</th>
+              <th className={cn(th, 'text-right')}>Locked In</th>
               <th className={cn(th, 'text-right')}>Actual Rev</th>
               <th className={cn(th, 'text-right')}>Proj. Tickets</th>
               <th className={cn(th, 'text-right')}>Proj. Range</th>
@@ -186,7 +193,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
           <tbody className="divide-y divide-neutral-100">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={27} className="px-3 py-10 text-center text-neutral-400">
+                <td colSpan={28} className="px-3 py-10 text-center text-neutral-400">
                   No shows this month.
                 </td>
               </tr>
@@ -244,9 +251,10 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
                   <td className={cn(td, 'text-right font-medium tabular-nums', cancelled && 'font-normal line-through')}>
                     {formatCurrency(showRevenueOn(show, portal, todayISO))}
                   </td>
-                  <td className={cn(td, cancelled && 'line-through')}>{show.status}</td>
+                  <td className={cn(td, cancelled && 'line-through')}>{statusLabel(show.status)}</td>
                   <td className={num}>{c.sold}</td>
                   <td className={num}>{c.sellThrough}</td>
+                  <td className={num}>{formatCurrency(lockedInFor(show, portal, todayISO))}</td>
                   <td className={num}>{c.actualRev != null ? formatCurrency(c.actualRev) : ''}</td>
                   <td className={num}>{c.projTickets ?? ''}</td>
                   <td className={num}>{c.projRange}</td>
@@ -289,7 +297,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
                 <td className={cn(td, 'text-right tabular-nums')}>{totalTickets}</td>
                 <td className={td} colSpan={2} />
                 <td className={cn(td, 'text-right tabular-nums')}>{formatCurrency(totalRevenue)}</td>
-                <td className={td} colSpan={11} />
+                <td className={td} colSpan={12} />
               </tr>
             </tfoot>
           )}

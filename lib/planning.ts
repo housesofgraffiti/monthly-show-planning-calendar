@@ -1,26 +1,30 @@
-import { isPastShow, type PortalMap } from './portal'
-import { isFlatFee, isLocalProducer, showRevenueOn } from './revenue'
+import { isPastShow, portalFor, type PortalMap } from './portal'
+import { isFlatFee, isLocalProducer, showMoney } from './revenue'
 import type { Show } from './shows'
 import { DEFAULT_DISCOVERY_REVENUE, EXPECTED_VALUE_WEIGHTS } from './planning-config'
 
 export type PlanningSummary = {
   target: number | null
-  actual: number
-  other: number
-  confirmed: number
-  confirmedExpected: number
+  // Real money: past actuals, tickets already sold, flat fees, plus other revenue.
+  lockedIn: number
+  // Projected or planned money still to come from On sale shows.
+  projectedRemaining: number
+  // Locked in + projected remaining.
+  projectedTotal: number
+  // Tentative and Idea shows, kept apart from the two buckets above.
   tentativeFull: number
   tentativeExpected: number
+  tentativeCount: number
+  // Projected total + tentative and Idea at their expected discount.
   expected: number
-  projected: number
   variance: number | null
   gap: number | null
   count: number
   average: number | null
 }
 
-// Every figure uses the shared revenue rule (flat fees, actuals, projections, planned),
-// and other revenue is included in every comparison to the target.
+// Money is split once per show by showMoney(): what is already real versus what is still a projection.
+// Other revenue counts as locked in, and every comparison to the target uses projected total.
 export function planningSummary({
   shows,
   portal,
@@ -34,40 +38,45 @@ export function planningSummary({
   other: number
   target: number | null
 }): PlanningSummary {
-  let actual = 0
-  let confirmed = 0
+  let showsLockedIn = 0
+  let projectedRemaining = 0
   let tentative = 0
   let idea = 0
+  let tentativeCount = 0
   let count = 0
 
   for (const show of shows) {
     if (show.status === 'Cancelled') continue
     count += 1
-    const value = showRevenueOn(show, portal, todayISO)
-    if (isPastShow(show, todayISO)) actual += value
-    else if (show.status === 'Confirmed') confirmed += value
-    else if (show.status === 'Tentative') tentative += value
-    else idea += value
+    const past = isPastShow(show, todayISO)
+    const money = showMoney(show, portalFor(show, portal), past)
+    showsLockedIn += money.lockedIn
+
+    if (past || show.status === 'Confirmed') {
+      projectedRemaining += money.remaining
+    } else {
+      tentativeCount += 1
+      if (show.status === 'Tentative') tentative += money.remaining
+      else idea += money.remaining
+    }
   }
 
-  const confirmedExpected = confirmed * EXPECTED_VALUE_WEIGHTS.Confirmed
+  const lockedIn = showsLockedIn + other
+  const projectedTotal = lockedIn + projectedRemaining
   const tentativeExpected = tentative * EXPECTED_VALUE_WEIGHTS.Tentative + idea * EXPECTED_VALUE_WEIGHTS.Idea
-  const showsTotal = actual + confirmed + tentative + idea
-  const expected = actual + other + confirmedExpected + tentativeExpected
-  const projected = showsTotal + other
+  const showsTotal = showsLockedIn + projectedRemaining + tentative + idea
 
   return {
     target,
-    actual,
-    other,
-    confirmed,
-    confirmedExpected,
+    lockedIn,
+    projectedRemaining,
+    projectedTotal,
     tentativeFull: tentative + idea,
     tentativeExpected,
-    expected,
-    projected,
-    variance: target == null ? null : projected - target,
-    gap: target == null ? null : target - expected,
+    tentativeCount,
+    expected: projectedTotal + tentativeExpected,
+    variance: target == null ? null : projectedTotal - target,
+    gap: target == null ? null : target - projectedTotal,
     count,
     average: count ? showsTotal / count : null,
   }

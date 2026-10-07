@@ -6,6 +6,16 @@ export type Category = (typeof CATEGORIES)[number]
 export const STATUSES = ['Idea', 'Tentative', 'Confirmed', 'Cancelled'] as const
 export type Status = (typeof STATUSES)[number]
 
+// The stored value stays 'Confirmed'; only the label people see changes.
+export const STATUS_LABELS: Record<Status, string> = {
+  Idea: 'Idea',
+  Tentative: 'Tentative',
+  Confirmed: 'On sale',
+  Cancelled: 'Cancelled',
+}
+
+export const statusLabel = (status: Status) => STATUS_LABELS[status]
+
 export const REGIONS = ['LA', 'Long Beach', 'Orange County'] as const
 export type Region = (typeof REGIONS)[number]
 

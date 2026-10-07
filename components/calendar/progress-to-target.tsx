@@ -6,8 +6,12 @@ import { TYPICAL_DISCOVERY_WINDOW_DAYS } from '@/lib/planning-config'
 
 type Segment = { key: string; label: string; value: number; className: string; style?: CSSProperties }
 
-const STRIPES: CSSProperties = {
-  backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 5px, rgba(5, 150, 105, 0.4) 5px 7px)',
+const PROJECTED_STRIPES: CSSProperties = {
+  backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 4px, rgba(5, 150, 105, 0.85) 4px 7px)',
+}
+
+const EXPECTED_STRIPES: CSSProperties = {
+  backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 7px, rgba(5, 150, 105, 0.3) 7px 9px)',
 }
 
 function GapText({ summary, typical }: { summary: PlanningSummary; typical: TypicalDiscovery | null }) {
@@ -49,15 +53,20 @@ export function ProgressToTarget({
 }) {
   const { target } = summary
   const segments: Segment[] = [
-    { key: 'actual', label: 'Actual', value: summary.actual, className: 'bg-neutral-900' },
-    { key: 'other', label: 'Other revenue', value: summary.other, className: 'bg-neutral-400' },
-    { key: 'confirmed', label: 'Confirmed', value: summary.confirmedExpected, className: 'bg-emerald-600' },
+    { key: 'locked', label: 'Locked in', value: summary.lockedIn, className: 'bg-neutral-900' },
+    {
+      key: 'projected',
+      label: 'Projected remaining',
+      value: summary.projectedRemaining,
+      className: 'bg-emerald-200',
+      style: PROJECTED_STRIPES,
+    },
     {
       key: 'tentative',
-      label: 'Tentative and Idea (expected)',
+      label: 'Tentative and Idea expected',
       value: summary.tentativeExpected,
-      className: 'bg-emerald-100',
-      style: STRIPES,
+      className: 'bg-emerald-50',
+      style: EXPECTED_STRIPES,
     },
   ]
 

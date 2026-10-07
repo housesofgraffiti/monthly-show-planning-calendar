@@ -1,8 +1,8 @@
 import { ShoppingBag } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatCompact, type Show } from '@/lib/shows'
+import { formatCurrency, statusLabel, type Show } from '@/lib/shows'
 import { paceTag, soldLabel, type PortalMatch } from '@/lib/portal'
-import { isFlatFee, isLocalProducer, showRevenue } from '@/lib/revenue'
+import { cardMoney, isLocalProducer, type CardMoney } from '@/lib/revenue'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -77,13 +77,38 @@ function PortalLine({ match, past, className }: { match: PortalMatch; past: bool
   )
 }
 
+// Real money (actual, sold, flat fee) is bold; anything projected or planned is lighter and marked with "~".
+const REAL = 'font-semibold'
+const ESTIMATE = 'font-normal opacity-60'
+
+function MoneyLine({ money, className }: { money: CardMoney; className: string }) {
+  return (
+    <span
+      className={cn(
+        'flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] leading-snug tabular-nums',
+        className,
+      )}
+    >
+      {money.kind === 'actual' && <span className={REAL}>{formatCurrency(money.amount)}</span>}
+      {money.kind === 'flat' && <span className={REAL}>{formatCurrency(money.amount)} flat fee</span>}
+      {money.kind === 'plan' && <span className={ESTIMATE}>~{formatCurrency(money.amount)} plan</span>}
+      {money.kind === 'linked' && (
+        <>
+          {money.sold != null && <span className={REAL}>{formatCurrency(money.sold)} sold</span>}
+          {money.projected > 0 && <span className={ESTIMATE}>~{formatCurrency(money.projected)} proj</span>}
+        </>
+      )}
+    </span>
+  )
+}
+
 export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props) {
   const styles = CATEGORY_STYLES[show.category]
   const cancelled = show.status === 'Cancelled'
   const solid = show.status === 'Confirmed'
-  const flat = isFlatFee(show)
+  const flat = show.revenueType === 'Flat fee'
   const local = isLocalProducer(show)
-  const revenue = showRevenue(show, match, past)
+  const money = cardMoney(show, match, past)
 
   return (
     <button
@@ -92,7 +117,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
         e.stopPropagation()
         onOpen(show)
       }}
-      aria-label={`${show.format}${show.venue ? ` at ${show.venue}` : ''}, ${show.status}. Edit show`}
+      aria-label={`${show.format}${show.venue ? ` at ${show.venue}` : ''}, ${statusLabel(show.status)}. Edit show`}
       className={cn(
         'block w-full rounded-lg border px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-1',
         styles.card,
@@ -121,15 +146,9 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
           {show.venue || show.area || '\u00A0'}
           {show.region !== 'LA' && <span className="text-[11px] opacity-75"> · {show.region}</span>}
         </span>
-        {!flat && revenue > 0 && <span className="shrink-0 tabular-nums">{formatCompact(revenue)}</span>}
       </span>
-      {flat ? (
-        <span className={cn('mt-0.5 block text-[11px] leading-snug tabular-nums', styles.sub)}>
-          Flat fee {formatCompact(show.flatFee ?? 0)}
-        </span>
-      ) : (
-        !local && match && <PortalLine match={match} past={past} className={cn('mt-0.5', styles.sub)} />
-      )}
+      {money && <MoneyLine money={money} className={cn('mt-0.5', styles.sub)} />}
+      {!flat && !local && match && <PortalLine match={match} past={past} className={cn('mt-0.5', styles.sub)} />}
     </button>
   )
 }
