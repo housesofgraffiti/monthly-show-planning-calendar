@@ -1,3 +1,5 @@
+import type { PortalMap } from './portal'
+
 export const CATEGORIES = ['Core', 'Premium', 'Special'] as const
 export type Category = (typeof CATEGORIES)[number]
 
@@ -67,9 +69,11 @@ export type ShowInput = Omit<Show, 'id'> & { id?: string }
 export type MonthData = {
   shows: Show[]
   target: number | null
+  portal?: PortalMap
+  portalSyncedAt?: string | null
 }
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 export const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

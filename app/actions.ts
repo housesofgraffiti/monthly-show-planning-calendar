@@ -5,7 +5,9 @@ import { redirect } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { ACCESS_COOKIE, accessTokenFor, hasTeamAccess, safeEqual } from '@/lib/team-access'
 import { monthBounds } from '@/lib/dates'
+import type { PortalMap, PortalMatch, PortalSuggestion } from '@/lib/portal'
 import {
+  DATE_RE,
   isUuid,
   MONTH_RE,
   validateShowInput,
@@ -109,22 +111,137 @@ export async function getMonthData(ym: string): Promise<MonthData> {
       .order('created_at'),
     supabase.from('monthly_targets').select('target').eq('month', start).maybeSingle(),
   ])
-  if (showsRes.error && isMissingNewColumns(showsRes.error)) {
-    showsRes = await supabase
+  let showsData: unknown = showsRes.data
+  let showsError = showsRes.error
+  if (showsError && isMissingNewColumns(showsError)) {
+    const fallback = await supabase
       .from('shows')
       .select(BASE_SHOW_COLUMNS)
       .gte('show_date', start)
       .lt('show_date', end)
       .order('show_date')
       .order('created_at')
+    showsData = fallback.data
+    showsError = fallback.error
   }
-  if (showsRes.error) throw new Error(showsRes.error.message)
+  if (showsError) throw new Error(showsError.message)
   if (targetRes.error) throw new Error(targetRes.error.message)
 
+  const shows = ((showsData ?? []) as ShowRow[]).map(fromRow)
+  const eventIds = [...new Set(shows.map((s) => s.portalEventId.trim()).filter(Boolean))]
+  const [portal, portalSyncedAt] = await Promise.all([readPortalMatches(eventIds), readLatestPortalSync()])
+
   return {
-    shows: (showsRes.data as ShowRow[]).map(fromRow),
+    shows,
     target: targetRes.data ? Number(targetRes.data.target) : null,
+    portal,
+    portalSyncedAt,
   }
+}
+
+type PortalEventRow = {
+  event_id: string
+  tickets_available: number | string | null
+  confirmed: number | string | null
+  revenue_cents: number | string | null
+  synced_at: string | null
+}
+
+type ProjectionRow = {
+  event_id: string
+  projected_tickets: number | string | null
+  low: number | string | null
+  high: number | string | null
+  projected_revenue_cents: number | string | null
+  confidence: string | null
+  pace_label: string | null
+  computed_at: string | null
+}
+
+const centsToDollars = (v: number | string | null) => (v == null ? null : Number(v) / 100)
+
+// portal_events and projections are read-only here. Any read failure degrades to
+// "no portal data" so the calendar keeps working exactly as before.
+async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
+  const portal: PortalMap = {}
+  if (eventIds.length === 0) return portal
+  const supabase = getSupabaseAdmin()
+
+  const [eventsRes, projectionsRes] = await Promise.all([
+    supabase
+      .from('portal_events')
+      .select('event_id, tickets_available, confirmed, revenue_cents, synced_at')
+      .in('event_id', eventIds)
+      .order('synced_at', { ascending: false, nullsFirst: false }),
+    supabase
+      .from('projections')
+      .select('event_id, projected_tickets, low, high, projected_revenue_cents, confidence, pace_label, computed_at')
+      .in('event_id', eventIds)
+      .order('computed_at', { ascending: false, nullsFirst: false }),
+  ])
+
+  const entry = (id: string): PortalMatch =>
+    (portal[id] ??= { eventId: id, hasEvent: false, confirmed: null, ticketsAvailable: null, revenue: null, projection: null })
+
+  if (eventsRes.error) console.error('Could not read portal_events:', eventsRes.error.message)
+  for (const row of (eventsRes.data ?? []) as PortalEventRow[]) {
+    const match = entry(row.event_id)
+    if (match.hasEvent) continue
+    match.hasEvent = true
+    match.confirmed = toNum(row.confirmed)
+    match.ticketsAvailable = toNum(row.tickets_available)
+    match.revenue = centsToDollars(row.revenue_cents)
+  }
+
+  if (projectionsRes.error) console.error('Could not read projections:', projectionsRes.error.message)
+  for (const row of (projectionsRes.data ?? []) as ProjectionRow[]) {
+    const match = entry(row.event_id)
+    if (match.projection) continue
+    match.projection = {
+      tickets: toNum(row.projected_tickets),
+      low: toNum(row.low),
+      high: toNum(row.high),
+      revenue: centsToDollars(row.projected_revenue_cents),
+      confidence: row.confidence,
+      paceLabel: row.pace_label,
+      computedAt: row.computed_at,
+    }
+  }
+  return portal
+}
+
+async function readLatestPortalSync(): Promise<string | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from('portal_events')
+    .select('synced_at')
+    .not('synced_at', 'is', null)
+    .order('synced_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    console.error('Could not read portal sync time:', error.message)
+    return null
+  }
+  return data?.synced_at ?? null
+}
+
+export async function getPortalSuggestions(date: unknown): Promise<PortalSuggestion[]> {
+  await requireAccess()
+  if (typeof date !== 'string' || !DATE_RE.test(date)) return []
+  const { data, error } = await getSupabaseAdmin()
+    .from('portal_events')
+    .select('event_id, venue')
+    .eq('show_date', date)
+    .order('event_id')
+    .limit(25)
+  if (error) {
+    console.error('Could not read portal suggestions:', error.message)
+    return []
+  }
+  return (data as { event_id: string; venue: string | null }[]).map((r) => ({
+    eventId: r.event_id,
+    venue: r.venue ?? '',
+  }))
 }
 
 export async function saveShow(raw: unknown): Promise<Show> {
@@ -159,7 +276,7 @@ export async function saveShow(raw: unknown): Promise<Show> {
     ;({ data, error } = await runSave(baseRow, BASE_SHOW_COLUMNS))
   }
   if (error) throw new Error(error.message)
-  return fromRow(data as ShowRow)
+  return fromRow(data as unknown as ShowRow)
 }
 
 export async function deleteShow(id: unknown): Promise<void> {

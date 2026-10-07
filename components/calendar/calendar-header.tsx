@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { monthTitle } from '@/lib/dates'
 import { CATEGORIES } from '@/lib/shows'
+import { isStale, timeAgo } from '@/lib/portal'
 import { CATEGORY_STYLES } from './category-styles'
 
 type View = 'calendar' | 'table'
@@ -79,7 +80,8 @@ export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, view, onVie
   )
 }
 
-export function Legend({ syncing }: { syncing: boolean }) {
+export function Legend({ syncing, portalSyncedAt }: { syncing: boolean; portalSyncedAt?: string | null }) {
+  const stale = portalSyncedAt ? isStale(portalSyncedAt) : false
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 text-sm text-neutral-600">
       <ul className="flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -100,9 +102,16 @@ export function Legend({ syncing }: { syncing: boolean }) {
         </li>
         <li className="text-neutral-400 line-through">Cancelled</li>
       </ul>
-      <p className="text-neutral-500" aria-live="polite">
-        {syncing ? 'Syncing…' : 'Syncs every 30s'}
-      </p>
+      <div className="flex items-center gap-3">
+        {portalSyncedAt && (
+          <p className={stale ? 'font-medium text-amber-600' : 'text-neutral-500'}>
+            Portal synced {timeAgo(portalSyncedAt)}
+          </p>
+        )}
+        <p className="text-neutral-500" aria-live="polite">
+          {syncing ? 'Syncing…' : 'Syncs every 30s'}
+        </p>
+      </div>
     </div>
   )
 }

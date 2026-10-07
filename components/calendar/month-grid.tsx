@@ -2,12 +2,14 @@ import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { buildMonthGrid, formatLongDate, formatShortWeekday, WEEKDAYS } from '@/lib/dates'
 import type { Show } from '@/lib/shows'
+import { isPastShow, portalFor, type PortalMap } from '@/lib/portal'
 import { ShowCard } from './show-card'
 
 type Props = {
   ym: string
   todayISO: string
   shows: Show[]
+  portal?: PortalMap
   onAdd: (date: string) => void
   onOpen: (show: Show) => void
 }
@@ -35,7 +37,16 @@ function DayNumber({ day, isToday, muted }: { day: number; isToday: boolean; mut
   )
 }
 
-export function MonthGrid({ ym, todayISO, shows, onAdd, onOpen }: Props) {
+export function MonthGrid({ ym, todayISO, shows, portal, onAdd, onOpen }: Props) {
+  const renderCard = (show: Show) => (
+    <ShowCard
+      key={show.id}
+      show={show}
+      onOpen={onOpen}
+      match={portalFor(show, portal)}
+      past={isPastShow(show, todayISO)}
+    />
+  )
   const grid = buildMonthGrid(ym)
   const byDate = groupByDate(shows)
   const monthDays = grid.filter((d) => d.inMonth)
@@ -96,9 +107,7 @@ export function MonthGrid({ ym, todayISO, shows, onAdd, onOpen }: Props) {
                     <Plus className="size-4" aria-hidden />
                   </button>
                 </div>
-                {dayShows.map((show) => (
-                  <ShowCard key={show.id} show={show} onOpen={onOpen} />
-                ))}
+                {dayShows.map(renderCard)}
               </div>
             )
           })}
@@ -118,9 +127,7 @@ export function MonthGrid({ ym, todayISO, shows, onAdd, onOpen }: Props) {
                 <DayNumber day={cell.day} isToday={isToday} />
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                {dayShows.map((show) => (
-                  <ShowCard key={show.id} show={show} onOpen={onOpen} />
-                ))}
+                {dayShows.map(renderCard)}
                 <button
                   type="button"
                   onClick={() => onAdd(cell.iso)}
