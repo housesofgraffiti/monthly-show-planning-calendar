@@ -4,15 +4,18 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { ACCESS_COOKIE, accessTokenFor, hasTeamAccess, safeEqual } from '@/lib/team-access'
-import { monthBounds } from '@/lib/dates'
-import type {
-  ImportCandidate,
-  ImportChoice,
-  ImportResult,
-  PortalMap,
-  PortalMatch,
-  PortalSuggestion,
+import { addDays, monthBounds } from '@/lib/dates'
+import {
+  portalFor,
+  type ImportCandidate,
+  type ImportChoice,
+  type ImportResult,
+  type PortalMap,
+  type PortalMatch,
+  type PortalSuggestion,
 } from '@/lib/portal'
+import { DISCOVERY_LOOKBACK_DAYS } from '@/lib/planning-config'
+import { isFlatFee, isLocalProducer } from '@/lib/revenue'
 import {
   DATE_RE,
   isUuid,
@@ -189,6 +192,38 @@ export async function getMonthData(ym: string): Promise<MonthData> {
     portal,
     portalSyncedAt,
   }
+}
+
+// Actual revenue of every past Discovery-format, Ticketed, non-Local-Producer show in the
+// lookback window that has portal results. The client averages these into "typical Discovery".
+export async function getDiscoveryActuals(): Promise<number[]> {
+  await requireAccess()
+  const today = todayInLosAngeles()
+  const since = addDays(today, -DISCOVERY_LOOKBACK_DAYS)
+  const supabase = getSupabaseAdmin()
+
+  const res = await runTiers((tier) =>
+    supabase
+      .from('shows')
+      .select(tier.columns)
+      .gte('show_date', since)
+      .lt('show_date', today)
+      .ilike('format', 'Discovery%')
+      .neq('status', 'Cancelled'),
+  )
+  if (res.error) throw new Error(res.error.message)
+
+  const shows = ((res.data ?? []) as ShowRow[])
+    .map(fromRow)
+    .filter((show) => !isFlatFee(show) && !isLocalProducer(show) && show.portalEventId.trim())
+  const portal = await readPortalMatches([...new Set(shows.map((s) => s.portalEventId.trim()))])
+
+  const actuals: number[] = []
+  for (const show of shows) {
+    const match = portalFor(show, portal)
+    if (match?.hasEvent && match.revenue != null) actuals.push(match.revenue)
+  }
+  return actuals
 }
 
 type OtherRevenueRow = { id: string; month: string; label: string; amount: number | string }

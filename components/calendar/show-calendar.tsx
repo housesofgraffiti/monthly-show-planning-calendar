@@ -7,6 +7,7 @@ import { createLocalSource, remoteSource, resetLocalData, type DataMode } from '
 import type { OtherRevenueInput, Show, ShowInput } from '@/lib/shows'
 import type { DayMarkerInput } from '@/lib/markers'
 import { portalFor, type ImportResult } from '@/lib/portal'
+import { typicalDiscovery, type MixKey } from '@/lib/planning'
 import { CalendarHeader, Legend } from './calendar-header'
 import { ImportPanel } from './import-panel'
 import { MarkersDialog } from './markers-dialog'
@@ -22,6 +23,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const thisMonth = todayISO.slice(0, 7)
   const [ym, setYm] = useState(thisMonth)
   const [view, setView] = useState<View>('calendar')
+  const [highlight, setHighlight] = useState<MixKey | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [importing, setImporting] = useState(false)
   const [editingMarkers, setEditingMarkers] = useState(false)
@@ -36,6 +38,17 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const { data: markers, mutate: mutateMarkers } = useSWR(['markers', mode, ym], () => source.getMarkers(ym), {
     keepPreviousData: true,
   })
+
+  const { data: discoveryActuals, error: discoveryError } = useSWR(
+    ['discovery-actuals', mode, todayISO],
+    () => source.getDiscoveryActuals(),
+    { revalidateOnFocus: false },
+  )
+  const typical = discoveryActuals
+    ? typicalDiscovery(discoveryActuals)
+    : discoveryError
+      ? typicalDiscovery([])
+      : null
 
   const shows = data?.shows ?? []
   const target = data?.target ?? null
@@ -111,7 +124,10 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         onAdd={() => openAdd(ym === thisMonth ? todayISO : `${ym}-01`)}
         onImport={mode === 'remote' ? () => setImporting(true) : undefined}
         view={view}
-        onViewChange={setView}
+        onViewChange={(next) => {
+          setView(next)
+          if (next === 'table') setHighlight(null)
+        }}
       />
 
       <SummaryBar
@@ -121,6 +137,9 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         otherRevenue={otherRevenue}
         portal={portal}
         todayISO={todayISO}
+        typical={typical}
+        highlight={highlight}
+        onHighlight={setHighlight}
         onSaveTarget={handleSaveTarget}
         onSaveOther={handleSaveOther}
         onDeleteOther={handleDeleteOther}
@@ -147,6 +166,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
             shows={shows}
             portal={portal}
             markers={markers ?? []}
+            highlight={highlight}
             onAdd={openAdd}
             onOpen={openEdit}
           />

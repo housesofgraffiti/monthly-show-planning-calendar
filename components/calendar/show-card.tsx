@@ -10,6 +10,7 @@ type Props = {
   onOpen: (show: Show) => void
   match?: PortalMatch
   past?: boolean
+  emphasis?: 'on' | 'off'
 }
 
 function PortalLine({ match, past, className }: { match: PortalMatch; past: boolean; className: string }) {
@@ -64,7 +65,7 @@ function PortalLine({ match, past, className }: { match: PortalMatch; past: bool
   )
 }
 
-export function ShowCard({ show, onOpen, match, past = false }: Props) {
+export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props) {
   const styles = CATEGORY_STYLES[show.category]
   const cancelled = show.status === 'Cancelled'
   const solid = show.status === 'Confirmed'
@@ -85,6 +86,8 @@ export function ShowCard({ show, onOpen, match, past = false }: Props) {
         styles.card,
         solid ? 'border-solid' : 'border-dashed',
         cancelled && 'line-through opacity-45',
+        emphasis === 'on' && 'ring-2 ring-neutral-900 ring-offset-1',
+        emphasis === 'off' && 'opacity-30',
       )}
     >
       <span className="flex items-center gap-1.5">
