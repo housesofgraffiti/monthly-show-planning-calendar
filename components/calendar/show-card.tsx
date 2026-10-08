@@ -63,7 +63,10 @@ function isUpcoming(date: string) {
 
 function Tag({ tag }: { tag: CardTag }) {
   return (
-    <span className={cn('shrink-0 whitespace-normal break-words rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>
+    <span
+      data-tour={tag === 'Behind' || tag === 'Ahead' ? 'pace-tag' : undefined}
+      className={cn('shrink-0 whitespace-normal break-words rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}
+    >
       {tag}
     </span>
   )
@@ -232,6 +235,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
   return (
     <button
       type="button"
+      data-tour="show-card"
       onClick={(e) => {
         e.stopPropagation()
         onOpen(show)

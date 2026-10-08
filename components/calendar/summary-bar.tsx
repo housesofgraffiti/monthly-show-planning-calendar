@@ -139,7 +139,7 @@ export function SummaryBar({
       <MixStrip shows={mixShows} highlight={highlight} onHighlight={onHighlight} />
   {regionLabel && <p className="px-1 text-sm text-neutral-500">{regionLabel}</p>}
 
-      <section aria-label="Monthly summary" className="flex flex-col gap-3">
+      <section aria-label="Monthly summary" data-tour="summary" className="flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 lg:grid-cols-4">
           <Stat size="lg" label="Target" hint="Click to edit">
             <TargetEditor key={target ?? 'none'} target={target} onSave={onSaveTarget} />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { addMonths } from '@/lib/dates'
 import { createLocalSource, remoteSource, resetLocalData, type DataMode } from '@/lib/data-source'
@@ -12,6 +12,8 @@ import { portalFor, type ImportResult } from '@/lib/portal'
 import { planningSummary, typicalDiscovery, type MixKey } from '@/lib/planning'
 import { CalendarHeader, Legend } from './calendar-header'
 import { DecisionsThisWeek } from './decisions-this-week'
+import { FaqPanel } from './faq-panel'
+import { hasSeenTour, useGuidedTour } from './guided-tour'
 import { ImportPanel } from './import-panel'
 import { MarkersDialog } from './markers-dialog'
 import { MonthGrid } from './month-grid'
@@ -20,10 +22,11 @@ import { SendDialog } from './send-dialog'
 import { ShowDialog } from './show-dialog'
 import { SummaryBar } from './summary-bar'
 import { TableView } from './table-view'
+import { VenuesPlaceholder } from './venues-placeholder'
 
 type Editor = { show?: Show; date: string; key: number }
 type SendEditor = { send?: Send; date: string; key: number }
-type View = 'calendar' | 'table'
+type View = 'calendar' | 'table' | 'venues'
 
 export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: string }) {
   const thisMonth = todayISO.slice(0, 7)
@@ -41,6 +44,8 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const [sendEditor, setSendEditor] = useState<SendEditor | null>(null)
   const [showSends, setShowSends] = useState(true)
   const [importMessage, setImportMessage] = useState<string | null>(null)
+  const [faqOpen, setFaqOpen] = useState(false)
+  const { start: startTour, ui: tourUi } = useGuidedTour()
   const source = useMemo(() => (mode === 'remote' ? remoteSource : createLocalSource(thisMonth)), [mode, thisMonth])
 
   const { data, error, isValidating, mutate } = useSWR(['month', mode, ym], () => source.getMonth(ym), {
@@ -73,6 +78,14 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
     { revalidateOnFocus: false },
   )
   const typical = typicalStat !== undefined ? typicalDiscovery(typicalStat) : typicalError ? typicalDiscovery(null) : null
+
+  const dataReady = data !== undefined
+  useEffect(() => {
+    if (!firstName || !dataReady || hasSeenTour()) return
+    // Wait for the page to paint so every section can be measured.
+    const timer = window.setTimeout(startTour, 600)
+    return () => window.clearTimeout(timer)
+  }, [firstName, dataReady, startTour])
 
   const shows = data?.shows ?? []
   const target = data?.target ?? null
@@ -199,9 +212,11 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         region={region}
         onRegionChange={changeRegion}
         viewers={viewers}
+        onTour={startTour}
+        onFaq={() => setFaqOpen(true)}
         onViewChange={(next) => {
           setView(next)
-          if (next === 'table') setHighlight(null)
+          if (next !== 'calendar') setHighlight(null)
         }}
       />
 
@@ -254,8 +269,10 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
             onOpen={openEdit}
             onOpenSend={openSend}
           />
-        ) : (
+        ) : view === 'table' ? (
           <TableView ym={ym} todayISO={todayISO} shows={visibleShows} portal={portal} sends={sends} onOpen={openEdit} />
+        ) : (
+          <VenuesPlaceholder />
         )}
       </div>
 
@@ -278,6 +295,9 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
       )}
 
       {nameReady && !firstName && <NamePrompt onSubmit={setName} />}
+
+      {faqOpen && <FaqPanel onClose={() => setFaqOpen(false)} />}
+      {tourUi}
 
       {sendEditor && (
         <SendDialog

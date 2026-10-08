@@ -33,7 +33,7 @@ const menuItem =
 function MarkerBanners({ markers }: { markers: DayMarker[] | undefined }) {
   if (!markers?.length) return null
   return (
-    <div className="flex flex-col gap-0.5">
+    <div data-tour="day-marker" className="flex flex-col gap-0.5">
       {markers.map((m) => (
         <span
           key={m.id}
@@ -148,6 +148,7 @@ export function MonthGrid({
             const isToday = cell.iso === todayISO
             const lastCol = i % 7 === 6
             const lastRow = i >= grid.length - 7
+            const altWeek = Math.floor(i / 7) % 2 === 1
 
             if (!cell.inMonth) {
               return (
@@ -156,7 +157,7 @@ export function MonthGrid({
                   className={cn(
                     'min-h-36 bg-neutral-50/70 p-2',
                     !lastCol && 'border-r border-neutral-100',
-                    !lastRow && 'border-b border-neutral-100',
+                    !lastRow && 'border-b border-neutral-300/70',
                   )}
                 >
                   <DayNumber day={cell.day} isToday={false} muted />
@@ -169,12 +170,14 @@ export function MonthGrid({
             return (
               <div
                 key={cell.iso}
+                data-tour={open ? 'open-night' : undefined}
                 onClick={() => setMenuDate(cell.iso)}
                 className={cn(
-                  'group relative flex min-h-36 cursor-pointer flex-col gap-1.5 p-2 transition-colors hover:bg-neutral-50',
+                  'group relative flex min-h-36 cursor-pointer flex-col gap-1.5 p-2 transition-colors hover:bg-neutral-100/60',
+                  altWeek && 'bg-neutral-50/70',
                   open && 'bg-sky-50/70 hover:bg-sky-100/60',
                   !lastCol && 'border-r border-neutral-100',
-                  !lastRow && 'border-b border-neutral-100',
+                  !lastRow && 'border-b border-neutral-300/70',
                 )}
               >
                 <MarkerBanners markers={markerMap.get(cell.iso)} />

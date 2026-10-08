@@ -11,7 +11,7 @@ const STATUS_STYLES: Record<SendStatus, string> = {
 export function SendChips({ sends, onOpen }: { sends: Send[] | undefined; onOpen: (send: Send) => void }) {
   if (!sends?.length) return null
   return (
-    <div className="flex flex-col gap-0.5">
+    <div data-tour="day-marker" className="flex flex-col gap-0.5">
       {sends.map((send) => {
         const Icon = send.channel === 'Email' ? Mail : MessageSquare
         return (

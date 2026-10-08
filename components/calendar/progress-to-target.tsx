@@ -79,6 +79,7 @@ export function ProgressToTarget({
   return (
     <section
       aria-label="Progress to target"
+      data-tour="progress"
       className="flex flex-col gap-4 rounded-2xl border border-neutral-200 bg-white px-5 py-5 sm:px-6"
     >
       <h2 className="text-sm font-medium text-neutral-500">Progress to target</h2>

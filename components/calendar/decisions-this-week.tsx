@@ -13,7 +13,7 @@ type Props = {
 export function DecisionsThisWeek({ decisions, portal, onOpen }: Props) {
   if (decisions.length === 0) return null
   return (
-    <section aria-label="Decisions this week" className="rounded-2xl border border-teal-200 bg-teal-50/50 px-4 py-3">
+    <section aria-label="Decisions this week" data-tour="decisions" className="rounded-2xl border border-teal-200 bg-teal-50/50 px-4 py-3">
       <h2 className="text-sm font-semibold text-neutral-900">
         Decisions this week <span className="font-normal text-neutral-500">· {decisions.length}</span>
       </h2>

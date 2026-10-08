@@ -109,7 +109,7 @@ export function OtherRevenuePanel({ ym, lines, onSave, onDelete, onCopy }: Props
   )
 
   return (
-    <section aria-label="Other revenue" className="flex flex-col gap-1 rounded-2xl border border-neutral-200 px-5 py-4">
+    <section aria-label="Other revenue" data-tour="other-revenue" className="flex flex-col gap-1 rounded-2xl border border-neutral-200 px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-baseline gap-3">
           <h2 className="text-sm font-medium text-neutral-700">Other revenue</h2>
