@@ -1,7 +1,17 @@
 import { ClipboardList, ShoppingBag } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { formatLongDate } from '@/lib/dates'
 import { formatCurrency, statusLabel, type Show } from '@/lib/shows'
-import { confirmedLabel, confirmedTotal, paceTag, projectedTotal, type PortalMatch } from '@/lib/portal'
+import {
+  capitalize,
+  compCount,
+  confirmedLabel,
+  confirmedTotal,
+  paceTag,
+  projectedRange,
+  projectedTotal,
+  type PortalMatch,
+} from '@/lib/portal'
 import { cardMoney, isLocalProducer, type CardMoney } from '@/lib/revenue'
 import { CATEGORY_STYLES } from './category-styles'
 
@@ -40,7 +50,7 @@ function hasTicketsLine(match: PortalMatch, past: boolean) {
 
 function Tag({ tag }: { tag: CardTag }) {
   return (
-    <span className={cn('shrink-0 whitespace-nowrap rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>
+    <span className={cn('shrink-0 whitespace-normal break-words rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>
       {tag}
     </span>
   )
@@ -49,11 +59,7 @@ function Tag({ tag }: { tag: CardTag }) {
 function TicketsLine({ match, past, className }: { match: PortalMatch; past: boolean; className: string }) {
   if (!hasTicketsLine(match, past)) return null
   if (past) {
-    return (
-      <span className={cn('mt-0.5 flex min-w-0 items-center justify-between gap-2 text-[11px] leading-snug tabular-nums', className)}>
-        <span>        {confirmedLabel(match)}</span>
-      </span>
-    )
+    return <span className={cn('mt-0.5 block text-[11px] leading-snug tabular-nums', className)}>{confirmedLabel(match)}</span>
   }
 
   const projection = match.projection
@@ -63,13 +69,13 @@ function TicketsLine({ match, past, className }: { match: PortalMatch; past: boo
   const lowConfidence = projection?.confidence === 'low'
 
   return (
-    <span className={cn('mt-1 flex min-w-0 items-center gap-2 text-[11px] leading-snug tabular-nums', className)}>
+    <span className={cn('mt-1 block text-[11px] leading-snug tabular-nums', className)}>
       {percent != null && (
-        <span aria-hidden className="h-1 min-w-4 flex-1 overflow-hidden rounded-full bg-current/15">
+        <span aria-hidden className="block h-1 w-full overflow-hidden rounded-full bg-current/15">
           <span className="block h-full rounded-full bg-current opacity-70" style={{ width: `${percent}%` }} />
         </span>
       )}
-      <span className="min-w-0 flex-1 truncate">
+      <span className="mt-0.5 block whitespace-normal break-words">
         {match.hasEvent && confirmedLabel(match)}
         {projected != null && (
           <span className={cn(lowConfidence && 'opacity-70')}>
@@ -101,6 +107,67 @@ function MoneyLine({ money, className }: { money: CardMoney; className: string }
   )
 }
 
+function PreviewRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+      <dt className="font-medium text-neutral-500">{label}</dt>
+      <dd className="min-w-0 whitespace-normal break-words text-neutral-900">{children}</dd>
+    </div>
+  )
+}
+
+function HoverPreview({ show, match, past }: { show: Show; match?: PortalMatch; past: boolean }) {
+  const projection = match?.projection
+  const range = projection ? projectedRange(projection) : null
+  const confirmed = match ? confirmedTotal(match) : null
+  const comps = match ? compCount(match) : 0
+  const revenue = cardMoney(show, match, past)
+  const revenueText =
+    revenue?.kind === 'flat'
+      ? `${formatCurrency(revenue.amount)} flat fee`
+      : revenue?.kind === 'plan'
+        ? `~${formatCurrency(revenue.amount)} plan`
+        : revenue?.kind === 'actual'
+          ? `${formatCurrency(revenue.amount)} in`
+          : revenue?.kind === 'linked'
+            ? `${revenue.sold != null ? `${formatCurrency(revenue.sold)} in` : ''}${revenue.sold != null && revenue.projected > 0 ? ' · ' : ''}${revenue.projected > 0 ? `~${formatCurrency(revenue.projected)} proj` : ''}`
+            : null
+
+  return (
+    <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-72 rounded-lg border border-neutral-300 bg-background p-3 text-[11px] leading-snug text-foreground opacity-0 shadow-lg transition-opacity delay-500 duration-150 group-hover:block group-hover:opacity-100 md:block">
+      <dl className="flex flex-col gap-1.5">
+        <PreviewRow label="Venue">{show.venue || show.area || 'Venue TBD'}</PreviewRow>
+        <PreviewRow label="Date">{formatLongDate(show.date)}</PreviewRow>
+        <PreviewRow label="Format">{show.format}</PreviewRow>
+        <PreviewRow label="Status">{statusLabel(show.status)}</PreviewRow>
+        <PreviewRow label="Organized by">{show.organizedBy}</PreviewRow>
+        <PreviewRow label="Region">{show.region}</PreviewRow>
+        {match?.hasEvent && (
+          <PreviewRow label="Tickets">
+            {confirmed ?? 0} / {match.ticketsAvailable ?? '—'} ({Math.max(0, (confirmed ?? 0) - comps)} paid, {comps} comp)
+            {match.vips ? ` · ${match.vips} VIPs` : ''}
+          </PreviewRow>
+        )}
+        {projection && (
+          <PreviewRow label="Projection">
+            {projectedTotal(projection) != null ? `~${Math.round(projectedTotal(projection)!)}` : '—'}
+            {range ? ` (${Math.round(range[0])} to ${Math.round(range[1])})` : ''}
+            {projection.confidence ? ` · ${capitalize(projection.confidence)}` : ''}
+            {projection.paceLabel ? ` · ${capitalize(projection.paceLabel)}` : ''}
+          </PreviewRow>
+        )}
+        {revenueText && <PreviewRow label="Revenue">{revenueText}</PreviewRow>}
+        {match?.ticketPrices && <PreviewRow label="Prices">{match.ticketPrices}</PreviewRow>}
+        {match?.ticketMix && <PreviewRow label="Mix">{match.ticketMix}</PreviewRow>}
+        {show.merch && <PreviewRow label="Merch">Yes</PreviewRow>}
+        {show.eventPlanner && <PreviewRow label="Event planner">Yes</PreviewRow>}
+        {show.venueFee != null && <PreviewRow label="Venue fee">{formatCurrency(show.venueFee)}</PreviewRow>}
+        {show.notes.trim() && <PreviewRow label="Notes">{show.notes.split(/\\r?\\n/, 1)[0]}</PreviewRow>}
+      </dl>
+    </div>
+  )
+}
+
 export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props) {
   const styles = CATEGORY_STYLES[show.category]
   const cancelled = show.status === 'Cancelled'
@@ -120,7 +187,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
       }}
       aria-label={`${show.format}${show.venue ? ` at ${show.venue}` : ''}, ${statusLabel(show.status)}. Edit show`}
       className={cn(
-        'block w-full rounded-lg border px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-1',
+        'group relative block w-full rounded-lg border px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-1',
         styles.card,
         solid ? 'border-solid' : 'border-dashed',
         cancelled && 'line-through opacity-45',
@@ -133,7 +200,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
       </span>
       <span className={cn('flex items-center gap-1.5 text-xs leading-snug', styles.sub)}>
         <span className={cn('size-2 shrink-0 rounded-full', styles.dot)} aria-hidden />
-        <span className="truncate">
+        <span className="min-w-0 whitespace-normal break-words">
           {show.format}
           {show.region !== 'LA' && <span className="text-[11px] opacity-75"> · {show.region}</span>}
         </span>
@@ -150,13 +217,14 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
           </span>
         )}
       </span>
-      {!flat && !local && match && <TicketsLine match={match} past={past} tag={tag} className={styles.sub} />}
+      {!flat && !local && match && <TicketsLine match={match} past={past} className={styles.sub} />}
       {money && <MoneyLine money={money} className={styles.sub} />}
       {tag && (
         <span className={cn('mt-1 flex justify-end', styles.sub)}>
           <Tag tag={tag} />
         </span>
       )}
+      <HoverPreview show={show} match={match} past={past} />
     </button>
   )
 }
