@@ -27,6 +27,7 @@ import type {
   MonthData,
   OtherRevenueInput,
   OtherRevenueLine,
+  SaveShowResult,
   Show,
   ShowInput,
   Status,
@@ -37,7 +38,7 @@ export type DataMode = 'remote' | 'local'
 export type DataSource = {
   getMonth: (ym: string) => Promise<MonthData>
   getTypicalDiscoveryRevenue: () => Promise<number | null>
-  saveShow: (input: ShowInput) => Promise<Show>
+  saveShow: (input: ShowInput) => Promise<SaveShowResult>
   deleteShow: (id: string) => Promise<void>
   saveTarget: (ym: string, target: number) => Promise<void>
   getPortalSuggestions: (date: string) => Promise<PortalSuggestion[]>
@@ -136,6 +137,8 @@ function seedState(ym: string): LocalState {
       adjustmentReason: null,
       adjustmentNote: '',
       modelTotalAtAdjustment: null,
+      updatedAt: null,
+      updatedBy: '',
     })),
     targets: { [ym]: 42000 },
     otherRevenue: [],
@@ -163,6 +166,8 @@ function read(seedMonth: string): LocalState {
           adjustmentReason: s.adjustmentReason ?? null,
           adjustmentNote: s.adjustmentNote ?? '',
           modelTotalAtAdjustment: s.modelTotalAtAdjustment ?? null,
+          updatedAt: s.updatedAt ?? null,
+          updatedBy: s.updatedBy ?? '',
         })),
         otherRevenue: parsed.otherRevenue ?? [],
         markers: parsed.markers ?? [],
@@ -262,12 +267,18 @@ export function createLocalSource(seedMonth: string): DataSource {
     },
     async saveShow(input) {
       const state = read(seedMonth)
-      const show: Show = { ...input, id: input.id ?? crypto.randomUUID() }
+      const { expectedUpdatedAt: _expected, force: _force, ...fields } = input
+      const show: Show = {
+        ...fields,
+        id: input.id ?? crypto.randomUUID(),
+        updatedAt: new Date().toISOString(),
+        updatedBy: input.updatedBy ?? '',
+      }
       const index = state.shows.findIndex((s) => s.id === show.id)
       if (index >= 0) state.shows[index] = show
       else state.shows.push(show)
       write(state)
-      return show
+      return { status: 'saved', show }
     },
     async deleteShow(id) {
       const state = read(seedMonth)

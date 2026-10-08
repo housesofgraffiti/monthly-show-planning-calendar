@@ -98,9 +98,20 @@ export type Show = {
   adjustmentNote: string
   // The model's projected total when the adjustment was saved. Set by the server, not editable.
   modelTotalAtAdjustment: number | null
+  updatedAt: string | null
+  updatedBy: string
 }
 
-export type ShowInput = Omit<Show, 'id'> & { id?: string }
+// expectedUpdatedAt is the updated_at the form was opened with; the server refuses to overwrite a
+// newer one unless force is set.
+export type ShowInput = Omit<Show, 'id' | 'updatedAt' | 'updatedBy'> & {
+  id?: string
+  updatedBy?: string
+  expectedUpdatedAt?: string | null
+  force?: boolean
+}
+
+export type SaveShowResult = { status: 'saved'; show: Show } | { status: 'conflict' }
 
 export type OtherRevenueLine = {
   id: string
@@ -201,6 +212,10 @@ export function validateShowInput(raw: unknown): ShowInput {
     adjustmentNote: adjustedTotal == null ? '' : cleanText(r.adjustmentNote, 500),
     modelTotalAtAdjustment:
       adjustedTotal == null ? null : cleanNumber(r.modelTotalAtAdjustment, { integer: true, max: 100_000 }),
+    updatedBy: cleanText(r.updatedBy, 40),
+    expectedUpdatedAt:
+      typeof r.expectedUpdatedAt === 'string' && r.expectedUpdatedAt.length <= 64 ? r.expectedUpdatedAt : null,
+    force: r.force === true,
   }
 }
 

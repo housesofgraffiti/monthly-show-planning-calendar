@@ -2,7 +2,9 @@ import { ChevronLeft, ChevronRight, Mail, Plus } from 'lucide-react'
 import { monthTitle } from '@/lib/dates'
 import { CATEGORIES, statusLabel } from '@/lib/shows'
 import { isStale, timeAgo } from '@/lib/portal'
+import type { Viewer } from '@/lib/use-calendar-realtime'
 import { CATEGORY_STYLES } from './category-styles'
+import { PresenceBubbles } from './presence-bubbles'
 
 type View = 'calendar' | 'table'
 
@@ -15,12 +17,23 @@ type HeaderProps = {
   onImport?: () => void
   view: View
   onViewChange: (view: View) => void
+  viewers?: Viewer[]
 }
 
 const outlineBtn =
   'inline-flex h-11 items-center justify-center border border-neutral-200 bg-white text-sm font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900'
 
-export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, onImport, view, onViewChange }: HeaderProps) {
+export function CalendarHeader({
+  ym,
+  onToday,
+  onPrev,
+  onNext,
+  onAdd,
+  onImport,
+  view,
+  onViewChange,
+  viewers = [],
+}: HeaderProps) {
   const { month, year } = monthTitle(ym)
   return (
     <header className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -33,6 +46,7 @@ export function CalendarHeader({ ym, onToday, onPrev, onNext, onAdd, onImport, v
         </h1>
       </div>
       <div className="flex flex-wrap items-center gap-2.5 sm:flex-nowrap sm:whitespace-nowrap">
+        <PresenceBubbles viewers={viewers} />
         <div
           role="group"
           aria-label="Calendar view"

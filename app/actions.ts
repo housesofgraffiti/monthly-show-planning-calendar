@@ -22,6 +22,7 @@ import {
   validateShowInput,
   type MonthData,
   type OtherRevenueLine,
+  type SaveShowResult,
   type Show,
 } from '@/lib/shows'
 import { validateMarkerInput, type DayMarker } from '@/lib/markers'
@@ -72,15 +73,18 @@ type ShowRow = {
   adjustment_reason: Show['adjustmentReason']
   adjustment_note: string | null
   model_total_at_adjustment: number | string | null
+  updated_at: string | null
+  updated_by: string | null
 }
 
 const BASE_SHOW_COLUMNS =
-  'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, portal_event_id, notes'
+  'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, portal_event_id, notes, updated_at'
 const REGION_SHOW_COLUMNS = `${BASE_SHOW_COLUMNS}, region, organized_by`
 const REVENUE_SHOW_COLUMNS = `${REGION_SHOW_COLUMNS}, venue_fee, merch, revenue_type, flat_fee`
 const EVENT_PLANNER_SHOW_COLUMNS = `${REVENUE_SHOW_COLUMNS}, event_planner`
 const MERCHANDISED_SHOW_COLUMNS = `${EVENT_PLANNER_SHOW_COLUMNS}, merchandised`
 const SHOW_COLUMNS = `${MERCHANDISED_SHOW_COLUMNS}, adjusted_total, adjustment_reason, adjustment_note, model_total_at_adjustment`
+const AUTHOR_SHOW_COLUMNS = `${SHOW_COLUMNS}, updated_by`
 
 const toNum = (v: number | string | null) => (v == null ? null : Number(v))
 
@@ -90,25 +94,38 @@ type ColumnTier = { columns: string; omit: string[] }
 const REVENUE_COLUMNS = ['venue_fee', 'merch', 'revenue_type', 'flat_fee']
 const ADJUSTMENT_COLUMNS = ['adjusted_total', 'adjustment_reason', 'adjustment_note', 'model_total_at_adjustment']
 const MERCHANDISED_COLUMNS = ['merchandised']
+const AUTHOR_COLUMNS = ['updated_by']
 const COLUMN_TIERS: ColumnTier[] = [
-  { columns: SHOW_COLUMNS, omit: [] },
-  { columns: MERCHANDISED_SHOW_COLUMNS, omit: ADJUSTMENT_COLUMNS },
-  { columns: EVENT_PLANNER_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS] },
-  { columns: REVENUE_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, MERCHANDISED_COLUMNS[0], 'event_planner'] },
+  { columns: AUTHOR_SHOW_COLUMNS, omit: [] },
+  { columns: SHOW_COLUMNS, omit: AUTHOR_COLUMNS },
+  { columns: MERCHANDISED_SHOW_COLUMNS, omit: [...AUTHOR_COLUMNS, ...ADJUSTMENT_COLUMNS] },
+  { columns: EVENT_PLANNER_SHOW_COLUMNS, omit: [...AUTHOR_COLUMNS, ...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS] },
+  {
+    columns: REVENUE_SHOW_COLUMNS,
+    omit: [...AUTHOR_COLUMNS, ...ADJUSTMENT_COLUMNS, MERCHANDISED_COLUMNS[0], 'event_planner'],
+  },
   {
     columns: REGION_SHOW_COLUMNS,
-    omit: [...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS, ...REVENUE_COLUMNS, 'event_planner'],
+    omit: [...AUTHOR_COLUMNS, ...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS, ...REVENUE_COLUMNS, 'event_planner'],
   },
   {
     columns: BASE_SHOW_COLUMNS,
-    omit: [...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS, ...REVENUE_COLUMNS, 'event_planner', 'region', 'organized_by'],
+    omit: [
+      ...AUTHOR_COLUMNS,
+      ...ADJUSTMENT_COLUMNS,
+      ...MERCHANDISED_COLUMNS,
+      ...REVENUE_COLUMNS,
+      'event_planner',
+      'region',
+      'organized_by',
+    ],
   },
 ]
 
 function isMissingColumns(error: PgError | null) {
   if (!error) return false
   if (error.code === '42703' || error.code === 'PGRST204') return true
-  return /region|organized_by|venue_fee|merchandised|merch|event_planner|revenue_type|flat_fee|adjusted_total|adjustment_|model_total/.test(
+  return /region|organized_by|venue_fee|merchandised|merch|event_planner|revenue_type|flat_fee|adjusted_total|adjustment_|model_total|updated_by/.test(
     error.message,
   )
 }
@@ -187,6 +204,8 @@ function fromRow(row: ShowRow): Show {
     adjustmentReason: row.adjustment_reason ?? null,
     adjustmentNote: row.adjustment_note ?? '',
     modelTotalAtAdjustment: toNum(row.model_total_at_adjustment ?? null),
+    updatedAt: row.updated_at ?? null,
+    updatedBy: row.updated_by ?? '',
   }
 }
 
@@ -832,7 +851,7 @@ export async function importFromPortal(ym: string, raw: unknown): Promise<Import
   return result
 }
 
-export async function saveShow(raw: unknown): Promise<Show> {
+export async function saveShow(raw: unknown): Promise<SaveShowResult> {
   await requireAccess()
   const input = validateShowInput(raw)
   const row = {
@@ -859,6 +878,7 @@ export async function saveShow(raw: unknown): Promise<Show> {
     adjustment_reason: input.adjustmentReason,
     adjustment_note: input.adjustmentNote || null,
     model_total_at_adjustment: null as number | null,
+    updated_by: input.updatedBy || null,
   }
   const supabase = getSupabaseAdmin()
 
@@ -879,11 +899,16 @@ export async function saveShow(raw: unknown): Promise<Show> {
     if (row.model_total_at_adjustment == null) row.model_total_at_adjustment = await readModelTotal(input.portalEventId)
   }
 
+  // The update only matches while updated_at is still what the form was opened with, so a newer
+  // edit by someone else is never overwritten unless the editor chose "Save anyway".
   const runSave = (payload: Record<string, unknown>, columns: string) => {
-    const query = input.id
-      ? supabase.from('shows').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', input.id)
-      : supabase.from('shows').insert(payload)
-    return query.select(columns).single()
+    if (!input.id) return supabase.from('shows').insert(payload).select(columns).single()
+    let update = supabase
+      .from('shows')
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq('id', input.id)
+    if (!input.force && input.expectedUpdatedAt) update = update.eq('updated_at', input.expectedUpdatedAt)
+    return update.select(columns).maybeSingle()
   }
 
   // Don't silently drop real revenue-field values if the migration hasn't run yet.
@@ -892,13 +917,13 @@ export async function saveShow(raw: unknown): Promise<Show> {
   const usesAdjustment = input.adjustedTotal != null
   const usesMerchandised = input.merchandised
   const tiers = usesAdjustment
-    ? COLUMN_TIERS.slice(0, 1)
+    ? COLUMN_TIERS.slice(0, 2)
     : usesMerchandised
-      ? COLUMN_TIERS.slice(0, 2)
+      ? COLUMN_TIERS.slice(0, 3)
       : usesEventPlanner
-        ? COLUMN_TIERS.slice(0, 3)
+        ? COLUMN_TIERS.slice(0, 4)
         : usesRevenueFields
-          ? COLUMN_TIERS.slice(0, 4)
+          ? COLUMN_TIERS.slice(0, 5)
           : COLUMN_TIERS
   const { data, error } = await runTiers((tier) => runSave(omitKeys(row, tier.omit), tier.columns), tiers)
   if (error) {
@@ -908,7 +933,8 @@ export async function saveShow(raw: unknown): Promise<Show> {
     if (usesRevenueFields && isMissingColumns(error)) throw new Error(NEW_FIELDS_HINT)
     throw new Error(error.message)
   }
-  return fromRow(data as unknown as ShowRow)
+  if (!data) return { status: 'conflict' }
+  return { status: 'saved', show: fromRow(data as unknown as ShowRow) }
 }
 
 export async function deleteShow(id: unknown): Promise<void> {
