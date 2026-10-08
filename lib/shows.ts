@@ -182,10 +182,12 @@ export function validateShowInput(raw: unknown): ShowInput {
   if (revenueType === 'Flat fee' && flatFee == null) throw new Error('Enter the flat fee amount')
 
   const adjustedTotal = cleanNumber(r.adjustedTotal, { integer: true, max: 100_000 })
-  const adjustmentReason = adjustedTotal == null ? null : (r.adjustmentReason as AdjustmentReason)
-  if (adjustedTotal != null && !ADJUSTMENT_REASONS.includes(adjustmentReason as AdjustmentReason)) {
-    throw new Error('Pick a reason for your estimate')
-  }
+  const adjustmentReason =
+    adjustedTotal == null || !r.adjustmentReason
+      ? null
+      : ADJUSTMENT_REASONS.includes(r.adjustmentReason as AdjustmentReason)
+        ? (r.adjustmentReason as AdjustmentReason)
+        : null
 
   return {
     id: r.id === undefined ? undefined : isUuid(r.id) ? r.id : (() => { throw new Error('Invalid id') })(),
