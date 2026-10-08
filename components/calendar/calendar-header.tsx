@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Mail, Plus } from 'lucide-react'
 import { monthTitle } from '@/lib/dates'
 import { CATEGORIES, statusLabel } from '@/lib/shows'
 import { isStale, timeAgo } from '@/lib/portal'
@@ -90,10 +90,14 @@ export function Legend({
   syncing,
   portalSyncedAt,
   onMarkers,
+  showSends,
+  onToggleSends,
 }: {
   syncing: boolean
   portalSyncedAt?: string | null
   onMarkers?: () => void
+  showSends?: boolean
+  onToggleSends?: () => void
 }) {
   const stale = portalSyncedAt ? isStale(portalSyncedAt) : false
   return (
@@ -123,6 +127,23 @@ export function Legend({
               className="rounded-md text-neutral-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
             >
               Day markers
+            </button>
+          </li>
+        )}
+        {onToggleSends && (
+          <li>
+            <button
+              type="button"
+              onClick={onToggleSends}
+              aria-pressed={showSends}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 ${
+                showSends
+                  ? 'border-teal-300 bg-teal-50 text-teal-800'
+                  : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50'
+              }`}
+            >
+              <Mail className="size-3.5" aria-hidden />
+              Sends
             </button>
           </li>
         )}

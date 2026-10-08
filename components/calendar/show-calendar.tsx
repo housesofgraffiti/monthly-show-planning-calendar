@@ -6,17 +6,21 @@ import { addMonths } from '@/lib/dates'
 import { createLocalSource, remoteSource, resetLocalData, type DataMode } from '@/lib/data-source'
 import type { OtherRevenueInput, Show, ShowInput } from '@/lib/shows'
 import type { DayMarkerInput } from '@/lib/markers'
+import { decideByFor, decisionsThisWeek, featuredInNames, type Send, type SendInput } from '@/lib/sends'
 import { portalFor, type ImportResult } from '@/lib/portal'
 import { typicalDiscovery, type MixKey } from '@/lib/planning'
 import { CalendarHeader, Legend } from './calendar-header'
+import { DecisionsThisWeek } from './decisions-this-week'
 import { ImportPanel } from './import-panel'
 import { MarkersDialog } from './markers-dialog'
 import { MonthGrid } from './month-grid'
+import { SendDialog } from './send-dialog'
 import { ShowDialog } from './show-dialog'
 import { SummaryBar } from './summary-bar'
 import { TableView } from './table-view'
 
 type Editor = { show?: Show; date: string; key: number }
+type SendEditor = { send?: Send; date: string; key: number }
 type View = 'calendar' | 'table'
 
 export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: string }) {
@@ -27,6 +31,8 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const [editor, setEditor] = useState<Editor | null>(null)
   const [importing, setImporting] = useState(false)
   const [editingMarkers, setEditingMarkers] = useState(false)
+  const [sendEditor, setSendEditor] = useState<SendEditor | null>(null)
+  const [showSends, setShowSends] = useState(true)
   const [importMessage, setImportMessage] = useState<string | null>(null)
   const source = useMemo(() => (mode === 'remote' ? remoteSource : createLocalSource(thisMonth)), [mode, thisMonth])
 
@@ -36,6 +42,10 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   })
 
   const { data: markers, mutate: mutateMarkers } = useSWR(['markers', mode, ym], () => source.getMarkers(ym), {
+    keepPreviousData: true,
+  })
+
+  const { data: sendData, mutate: mutateSends } = useSWR(['sends', mode], () => source.getSends(), {
     keepPreviousData: true,
   })
 
@@ -50,8 +60,12 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const target = data?.target ?? null
   const otherRevenue = data?.otherRevenue ?? []
   const portal = data?.portal
+  const sends = sendData ?? []
+  const decisions = decisionsThisWeek(shows, sends, todayISO)
 
   const openAdd = (date: string) => setEditor({ date, key: Date.now() })
+  const openAddSend = (date: string) => setSendEditor({ date, key: Date.now() })
+  const openSend = (send: Send) => setSendEditor({ send, date: send.date, key: Date.now() })
   const openEdit = (show: Show) => setEditor({ show, date: show.date, key: Date.now() })
 
   const handleSave = async (input: ShowInput) => {
@@ -79,6 +93,18 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const handleCopyOther = async () => {
     const result = await source.copyOtherRevenue(ym)
     return result
+  }
+
+  const handleSaveSend = async (input: SendInput) => {
+    await source.saveSend(input)
+    setSendEditor(null)
+    await mutateSends()
+  }
+
+  const handleDeleteSend = async (id: string) => {
+    await source.deleteSend(id)
+    setSendEditor(null)
+    await mutateSends()
   }
 
   const handleSaveMarker = async (input: DayMarkerInput) => {
@@ -143,11 +169,14 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
       />
 
       <div className="flex flex-col gap-4">
+        {view === 'calendar' && <DecisionsThisWeek decisions={decisions} portal={portal} onOpen={openEdit} />}
         {view === 'calendar' && (
           <Legend
             syncing={isValidating}
             portalSyncedAt={data?.portalSyncedAt}
             onMarkers={() => setEditingMarkers(true)}
+            showSends={showSends}
+            onToggleSends={() => setShowSends((on) => !on)}
           />
         )}
         {error && (
@@ -162,12 +191,16 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
             shows={shows}
             portal={portal}
             markers={markers ?? []}
+            sends={sends}
+            showSends={showSends}
             highlight={highlight}
             onAdd={openAdd}
+            onAddSend={openAddSend}
             onOpen={openEdit}
+            onOpenSend={openSend}
           />
         ) : (
-          <TableView ym={ym} todayISO={todayISO} shows={shows} portal={portal} onOpen={openEdit} />
+          <TableView ym={ym} todayISO={todayISO} shows={shows} portal={portal} sends={sends} onOpen={openEdit} />
         )}
       </div>
 
@@ -177,11 +210,25 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
           show={editor.show}
           date={editor.date}
           match={editor.show ? portalFor(editor.show, portal) : undefined}
+          decideBy={editor.show ? decideByFor(editor.show, sends, todayISO) : null}
+          featuredIn={editor.show ? featuredInNames(editor.show, sends) : []}
           getSuggestions={source.getPortalSuggestions}
           getMarkers={source.getMarkers}
           onClose={() => setEditor(null)}
           onSave={handleSave}
           onDelete={handleDelete}
+        />
+      )}
+
+      {sendEditor && (
+        <SendDialog
+          key={sendEditor.key}
+          send={sendEditor.send}
+          date={sendEditor.date}
+          getShowsRange={source.getShowsRange}
+          onClose={() => setSendEditor(null)}
+          onSave={handleSaveSend}
+          onDelete={handleDeleteSend}
         />
       )}
 

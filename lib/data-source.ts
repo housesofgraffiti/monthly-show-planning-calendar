@@ -2,21 +2,26 @@ import {
   copyOtherRevenueToNextMonth,
   deleteDayMarker,
   deleteOtherRevenue,
+  deleteSend,
   deleteShow,
   getDayMarkers,
   getImportCandidates,
   getMonthData,
   getPortalSuggestions,
+  getSends,
+  getShowsRange,
   getTypicalDiscoveryRevenue,
   importFromPortal,
   saveDayMarker,
   saveMonthlyTarget,
   saveOtherRevenue,
+  saveSend,
   saveShow,
 } from '@/app/actions'
 import { addMonths, daysInMonth } from '@/lib/dates'
 import type { DayMarker, DayMarkerInput } from '@/lib/markers'
-import type { ImportCandidate, ImportChoice, ImportResult, PortalSuggestion } from '@/lib/portal'
+import type { ImportCandidate, ImportChoice, ImportResult, PortalMap, PortalSuggestion } from '@/lib/portal'
+import { sortSends, type Send, type SendInput } from '@/lib/sends'
 import type {
   Category,
   MonthData,
@@ -44,9 +49,17 @@ export type DataSource = {
   getMarkers: (ym: string) => Promise<DayMarker[]>
   saveMarker: (input: DayMarkerInput) => Promise<DayMarker>
   deleteMarker: (id: string) => Promise<void>
+  getSends: () => Promise<Send[]>
+  saveSend: (input: SendInput) => Promise<Send>
+  deleteSend: (id: string) => Promise<void>
+  getShowsRange: (start: string, end: string) => Promise<{ shows: Show[]; portal: PortalMap }>
 }
 
 export const remoteSource: DataSource = {
+  getSends: () => getSends(),
+  saveSend: (input) => saveSend(input),
+  deleteSend: (id) => deleteSend(id),
+  getShowsRange: (start, end) => getShowsRange(start, end),
   saveOtherRevenue: (input) => saveOtherRevenue(input),
   deleteOtherRevenue: (id) => deleteOtherRevenue(id),
   copyOtherRevenue: (ym) => copyOtherRevenueToNextMonth(ym),
@@ -70,6 +83,7 @@ type LocalState = {
   targets: Record<string, number>
   otherRevenue: OtherRevenueLine[]
   markers: DayMarker[]
+  sends: Send[]
 }
 
 type Seed = [number, Category, string, string, string, number | null, number | null, number | null, Status]
@@ -125,6 +139,7 @@ function seedState(ym: string): LocalState {
     targets: { [ym]: 42000 },
     otherRevenue: [],
     markers: [],
+    sends: [],
   }
 }
 
@@ -149,6 +164,7 @@ function read(seedMonth: string): LocalState {
         })),
         otherRevenue: parsed.otherRevenue ?? [],
         markers: parsed.markers ?? [],
+        sends: parsed.sends ?? [],
       }
     } catch {
       // fall through and reseed corrupted preview data
@@ -220,6 +236,27 @@ export function createLocalSource(seedMonth: string): DataSource {
       const state = read(seedMonth)
       state.markers = state.markers.filter((m) => m.id !== id)
       write(state)
+    },
+    async getSends() {
+      return sortSends(read(seedMonth).sends)
+    },
+    async saveSend(input) {
+      const state = read(seedMonth)
+      const send: Send = { ...input, id: input.id ?? crypto.randomUUID() }
+      const index = state.sends.findIndex((s) => s.id === send.id)
+      if (index >= 0) state.sends[index] = send
+      else state.sends.push(send)
+      write(state)
+      return send
+    },
+    async deleteSend(id) {
+      const state = read(seedMonth)
+      state.sends = state.sends.filter((s) => s.id !== id)
+      write(state)
+    },
+    async getShowsRange(start, end) {
+      const shows = read(seedMonth).shows.filter((s) => s.date >= start && s.date <= end)
+      return { shows: shows.sort((a, b) => a.date.localeCompare(b.date)), portal: {} }
     },
     async saveShow(input) {
       const state = read(seedMonth)

@@ -14,6 +14,7 @@ import {
 } from '@/lib/portal'
 import { cardMoney, isLocalProducer, type CardMoney } from '@/lib/revenue'
 import { activeAdjustment } from '@/lib/adjustments'
+import { decideBySource, formatDayShort, type DecideBy } from '@/lib/sends'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -22,6 +23,7 @@ type Props = {
   match?: PortalMatch
   past?: boolean
   emphasis?: 'on' | 'off'
+  decideBy?: DecideBy | null
 }
 
 type CardTag = 'Sellout likely' | 'Behind' | 'Ahead' | 'LP'
@@ -129,7 +131,17 @@ function PreviewRow({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-function HoverPreview({ show, match, past }: { show: Show; match?: PortalMatch; past: boolean }) {
+function HoverPreview({
+  show,
+  match,
+  past,
+  decideBy,
+}: {
+  show: Show
+  match?: PortalMatch
+  past: boolean
+  decideBy?: DecideBy | null
+}) {
   const projection = match?.projection
   const range = projection ? projectedRange(projection) : null
   const confirmed = match ? confirmedTotal(match) : null
@@ -155,6 +167,11 @@ function HoverPreview({ show, match, past }: { show: Show; match?: PortalMatch; 
         <PreviewRow label="Status">{statusLabel(show.status)}</PreviewRow>
         <PreviewRow label="Organized by">{show.organizedBy}</PreviewRow>
         <PreviewRow label="Region">{show.region}</PreviewRow>
+        {decideBy && (
+          <PreviewRow label="Decide by">
+            {formatDayShort(decideBy.date)} · {decideBySource(decideBy)}
+          </PreviewRow>
+        )}
         {match?.hasEvent && (
           <PreviewRow label="Tickets">
             {confirmed ?? 0} / {match.ticketsAvailable ?? '—'} ({Math.max(0, (confirmed ?? 0) - comps)} paid, {comps} comp)
@@ -189,7 +206,7 @@ function HoverPreview({ show, match, past }: { show: Show; match?: PortalMatch; 
   )
 }
 
-export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props) {
+export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy }: Props) {
   const styles = CATEGORY_STYLES[show.category]
   const cancelled = show.status === 'Cancelled'
   const solid = show.status === 'Confirmed'
@@ -245,7 +262,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
           <Tag tag={tag} />
         </span>
       )}
-      <HoverPreview show={show} match={match} past={past} />
+      <HoverPreview show={show} match={match} past={past} decideBy={decideBy} />
     </button>
   )
 }

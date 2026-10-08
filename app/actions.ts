@@ -25,6 +25,7 @@ import {
   type Show,
 } from '@/lib/shows'
 import { validateMarkerInput, type DayMarker } from '@/lib/markers'
+import { validateSendInput, type Send } from '@/lib/sends'
 
 const NEW_FIELDS_HINT =
   'This needs the new database columns/tables. Run scripts/003_add_revenue_and_markers.sql in Supabase, then try again.'
@@ -32,6 +33,9 @@ const EVENT_PLANNER_HINT =
   'Event planner needs a new database column. Run scripts/004_add_event_planner.sql in Supabase, then try again.'
 const ADJUSTMENT_HINT =
   'Your estimate needs new database columns. Run scripts/005_add_projection_adjustments.sql in Supabase, then try again.'
+
+const SENDS_HINT =
+  'Marketing sends need a new database table. Run scripts/006_add_marketing_sends.sql in Supabase, then try again.'
 
 type PgError = { code?: string; message: string }
 type PgResult = { data: unknown; error: PgError | null }
@@ -368,6 +372,116 @@ export async function deleteDayMarker(id: unknown): Promise<void> {
   if (!isUuid(id)) throw new Error('Invalid id')
   const { error } = await getSupabaseAdmin().from('day_markers').delete().eq('id', id)
   if (error) throw writeError(error)
+}
+
+type SendRow = {
+  id: string
+  send_date: string
+  name: string
+  channel: Send['channel']
+  segment: string | null
+  assigned_to: string | null
+  status: Send['status']
+  notes: string | null
+  featured_show_ids: string[] | null
+}
+
+const SEND_COLUMNS = 'id, send_date, name, channel, segment, assigned_to, status, notes, featured_show_ids'
+
+const fromSendRow = (row: SendRow): Send => ({
+  id: row.id,
+  date: row.send_date,
+  name: row.name,
+  channel: row.channel,
+  segment: row.segment ?? '',
+  assignedTo: row.assigned_to ?? '',
+  status: row.status,
+  notes: row.notes ?? '',
+  featuredShowIds: row.featured_show_ids ?? [],
+})
+
+function sendWriteError(error: PgError) {
+  if (error.code === '42P01' || error.code === 'PGRST205') return new Error(SENDS_HINT)
+  return new Error(error.message)
+}
+
+// Reads degrade to an empty list until scripts/006 has created the table.
+export async function getSends(): Promise<Send[]> {
+  await requireAccess()
+  const { data, error } = await getSupabaseAdmin()
+    .from('marketing_sends')
+    .select(SEND_COLUMNS)
+    .order('send_date')
+    .order('created_at')
+    .limit(3000)
+  if (error) {
+    console.error('Could not read marketing_sends:', error.message)
+    return []
+  }
+  return ((data ?? []) as unknown as SendRow[]).map(fromSendRow)
+}
+
+export async function saveSend(raw: unknown): Promise<Send> {
+  await requireAccess()
+  const input = validateSendInput(raw)
+  const row = {
+    send_date: input.date,
+    name: input.name,
+    channel: input.channel,
+    segment: input.segment || null,
+    assigned_to: input.assignedTo || null,
+    status: input.status,
+    notes: input.notes || null,
+    featured_show_ids: input.featuredShowIds,
+  }
+  const supabase = getSupabaseAdmin()
+  const query = input.id
+    ? supabase
+        .from('marketing_sends')
+        .update({ ...row, updated_at: new Date().toISOString() })
+        .eq('id', input.id)
+    : supabase.from('marketing_sends').insert(row)
+  const { data, error } = await query.select(SEND_COLUMNS).single()
+  if (error) throw sendWriteError(error)
+  return fromSendRow(data as unknown as SendRow)
+}
+
+export async function deleteSend(id: unknown): Promise<void> {
+  await requireAccess()
+  if (!isUuid(id)) throw new Error('Invalid id')
+  const { error } = await getSupabaseAdmin().from('marketing_sends').delete().eq('id', id)
+  if (error) throw sendWriteError(error)
+}
+
+// Shows (with their portal numbers) between two dates, inclusive. Read-only.
+export async function getShowsRange(start: unknown, end: unknown): Promise<{ shows: Show[]; portal: PortalMap }> {
+  await requireAccess()
+  if (
+    typeof start !== 'string' ||
+    typeof end !== 'string' ||
+    !DATE_RE.test(start) ||
+    !DATE_RE.test(end) ||
+    end < start
+  ) {
+    throw new Error('Invalid date range')
+  }
+  if ((Date.parse(end) - Date.parse(start)) / 86_400_000 > 120) throw new Error('That date range is too long')
+
+  const supabase = getSupabaseAdmin()
+  const res = await runTiers((tier) =>
+    supabase
+      .from('shows')
+      .select(tier.columns)
+      .gte('show_date', start)
+      .lte('show_date', end)
+      .order('show_date')
+      .order('created_at'),
+  )
+  if (res.error) throw new Error(res.error.message)
+
+  const shows = ((res.data ?? []) as ShowRow[]).map(fromRow)
+  const eventIds = [...new Set(shows.map((s) => s.portalEventId.trim()).filter(Boolean))]
+  return { shows, portal: await readPortalMatches(eventIds) }
 }
 
 type PortalEventRow = {

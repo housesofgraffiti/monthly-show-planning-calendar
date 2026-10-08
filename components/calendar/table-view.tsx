@@ -19,6 +19,7 @@ import {
 } from '@/lib/portal'
 import { isFlatFee, isLocalProducer, showMoney, showRevenueOn } from '@/lib/revenue'
 import { modelTotal } from '@/lib/adjustments'
+import { decideByFor, featuredInNames, formatDayShort, type Send } from '@/lib/sends'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -26,6 +27,7 @@ type Props = {
   todayISO: string
   shows: Show[]
   portal?: PortalMap
+  sends: Send[]
   onOpen: (show: Show) => void
 }
 
@@ -85,6 +87,8 @@ type Row = {
   adjusted: number | null
   reason: string
   finalTotal: number | null
+  decideBy: string
+  featuredIn: string
   locked: number
   revenue: number
 }
@@ -309,9 +313,12 @@ const COLUMNS: Column[] = [
     cell: (r) => r.c.pace,
     csv: (r) => r.c.pace,
   },
+  { id: 'decideBy', label: 'Decide by', cell: (r) => r.decideBy, csv: (r) => r.decideBy },
+  { id: 'featuredIn', label: 'Featured in', cell: (r) => r.featuredIn, csv: (r) => r.featuredIn },
 ]
 
-function buildRow(show: Show, portal: PortalMap | undefined, todayISO: string): Row {
+function buildRow(show: Show, portal: PortalMap | undefined, todayISO: string, sends: Send[]): Row {
+  const decideBy = decideByFor(show, sends, todayISO)
   const match = portalFor(show, portal)
   const past = isPastShow(show, todayISO)
   const ticketed = !isFlatFee(show) && !isLocalProducer(show)
@@ -325,6 +332,8 @@ function buildRow(show: Show, portal: PortalMap | undefined, todayISO: string): 
     adjusted: ticketed ? show.adjustedTotal : null,
     reason: ticketed && show.adjustedTotal != null ? (show.adjustmentReason ?? '') : '',
     finalTotal: ticketed && past && match?.hasEvent ? (confirmedTotal(match) ?? null) : null,
+    decideBy: decideBy ? formatDayShort(decideBy.date) : '',
+    featuredIn: featuredInNames(show, sends).join('; '),
     locked: showMoney(show, match, past).lockedIn,
     revenue: showRevenueOn(show, portal, todayISO),
   }
@@ -353,7 +362,7 @@ const th = 'px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider t
 const td = 'px-3 py-2.5 align-top'
 const numeric = 'whitespace-nowrap text-right tabular-nums'
 
-export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
+export function TableView({ ym, todayISO, shows, portal, sends, onOpen }: Props) {
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
@@ -374,7 +383,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
   }
 
   const sorted = [...shows].sort((a, b) => a.date.localeCompare(b.date))
-  const rows = sorted.map((show) => buildRow(show, portal, todayISO))
+  const rows = sorted.map((show) => buildRow(show, portal, todayISO, sends))
   const active = rows.filter((r) => !r.cancelled)
   const totals: Totals = {
     tickets: active.reduce((sum, r) => sum + (r.flat ? 0 : (r.show.tickets ?? 0)), 0),
@@ -409,7 +418,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-200">
-        <table className={cn('w-full border-collapse text-sm', showAll ? 'min-w-[3100px]' : 'min-w-[900px]')}>
+        <table className={cn('w-full border-collapse text-sm', showAll ? 'min-w-[3500px]' : 'min-w-[900px]')}>
           <thead className="border-b border-neutral-200 bg-neutral-50/60">
             <tr>
               {visible.map((col) => (
