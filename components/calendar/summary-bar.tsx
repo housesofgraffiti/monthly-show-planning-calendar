@@ -43,12 +43,12 @@ function Stat({
 }) {
   const large = size === 'lg'
   return (
-    <div className={cn('flex flex-col gap-1 bg-white', large ? 'px-5 py-5' : 'px-5 py-3.5')}>
+    <div className={cn('flex min-w-0 flex-col gap-1 bg-white', large ? 'px-4 py-4 sm:px-5 sm:py-5' : 'px-4 py-3.5 sm:px-5')}>
       <span className="text-sm text-neutral-500">{label}</span>
       <div
         className={cn(
-          'font-semibold tracking-tight tabular-nums text-neutral-900',
-          large ? 'text-3xl md:text-4xl' : 'text-xl',
+          'break-words font-semibold tracking-tight tabular-nums text-neutral-900',
+          large ? 'text-2xl sm:text-3xl md:text-4xl' : 'text-xl',
         )}
       >
         {children}

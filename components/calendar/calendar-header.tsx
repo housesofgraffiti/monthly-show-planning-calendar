@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, Mail, Plus } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { monthTitle } from '@/lib/dates'
 import { CATEGORIES, REGIONS, statusLabel, type Region } from '@/lib/shows'
 import { isStale, timeAgo } from '@/lib/portal'
@@ -28,6 +29,8 @@ type HeaderProps = {
 const outlineBtn =
   'inline-flex h-11 items-center justify-center border border-neutral-200 bg-white text-sm font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900'
 
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900'
+
 export function CalendarHeader({
   ym,
   onToday,
@@ -45,22 +48,91 @@ export function CalendarHeader({
 }: HeaderProps) {
   const { month, year } = monthTitle(ym)
   return (
-    <header className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-      <div data-tour="header" className="flex flex-col gap-2">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-400">
-          Sofar Sounds LA · Show Calendar
-        </p>
-        <h1 className="text-4xl font-semibold tracking-tight text-neutral-900 md:text-5xl" aria-live="polite">
-          {month} <span className="text-neutral-300">{year}</span>
-        </h1>
+    <header className="flex flex-col gap-3 sm:gap-4">
+      <div className="flex items-center justify-between gap-x-4 gap-y-3 sm:flex-wrap sm:items-end">
+        <div data-tour="header" className="flex min-w-0 flex-col gap-1.5">
+          <p className="hidden text-xs font-medium uppercase tracking-[0.18em] text-neutral-400 sm:block">
+            Sofar Sounds LA · Show Calendar
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onPrev}
+              aria-label="Previous month"
+              className={cn('-ml-2 inline-flex size-10 shrink-0 items-center justify-center rounded-xl text-neutral-600 hover:bg-neutral-100 sm:hidden', focusRing)}
+            >
+              <ChevronLeft className="size-5" aria-hidden />
+            </button>
+            <h1
+              className="whitespace-nowrap text-xl font-semibold tracking-tight text-neutral-900 sm:text-3xl lg:text-4xl xl:text-5xl"
+              aria-live="polite"
+            >
+              {month} <span className="text-neutral-300">{year}</span>
+            </h1>
+            <button
+              type="button"
+              onClick={onNext}
+              aria-label="Next month"
+              className={cn('inline-flex size-10 shrink-0 items-center justify-center rounded-xl text-neutral-600 hover:bg-neutral-100 sm:hidden', focusRing)}
+            >
+              <ChevronRight className="size-5" aria-hidden />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+          <div className="hidden items-center gap-2 sm:flex">
+            <PresenceBubbles viewers={viewers} />
+            <div data-tour="month-nav" className="flex items-center gap-2">
+              <button type="button" onClick={onToday} className={`${outlineBtn} rounded-xl px-3 lg:px-4`}>
+                Today
+              </button>
+              <div className="flex">
+                <button type="button" onClick={onPrev} aria-label="Previous month" className={`${outlineBtn} w-10 rounded-l-xl lg:w-11`}>
+                  <ChevronLeft className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={onNext}
+                  aria-label="Next month"
+                  className={`${outlineBtn} -ml-px w-10 rounded-r-xl lg:w-11`}
+                >
+                  <ChevronRight className="size-4" aria-hidden />
+                </button>
+              </div>
+            </div>
+            {onImport && (
+              <button
+                type="button"
+                onClick={onImport}
+                aria-label="Import from portal"
+                data-tour="import"
+                className={`${outlineBtn} whitespace-nowrap rounded-xl px-3 lg:px-4`}
+              >
+                <span className="lg:hidden">Import</span>
+                <span className="hidden lg:inline">Import from portal</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onAdd}
+              data-tour="add-show"
+              className="inline-flex h-11 items-center gap-1.5 whitespace-nowrap rounded-xl bg-neutral-900 px-3 text-sm font-medium text-white transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 lg:px-4"
+            >
+              <Plus className="size-4" aria-hidden />
+              Add show
+            </button>
+          </div>
+          <HelpMenu onTour={onTour} onFaq={onFaq} onImport={onImport} />
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2.5 whitespace-nowrap xl:flex-nowrap">
-        <PresenceBubbles viewers={viewers} />
+
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div
           role="group"
           aria-label="Calendar view"
           data-tour="view-toggle"
-          className="flex rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium"
+          className="flex w-full rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium sm:w-auto"
         >
           {(['calendar', 'table', 'venues'] as const).map((v) => (
             <button
@@ -68,63 +140,69 @@ export function CalendarHeader({
               type="button"
               onClick={() => onViewChange(v)}
               aria-pressed={view === v}
-              className={`rounded-[0.6rem] px-3.5 py-2 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 ${
-                view === v ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'
-              }`}
+              className={cn(
+                'flex-1 rounded-[0.6rem] px-3.5 py-2.5 text-center capitalize transition-colors sm:flex-none sm:py-2',
+                focusRing,
+                view === v ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50',
+              )}
             >
               {v}
             </button>
           ))}
         </div>
-        <div role="group" aria-label="Region filter" data-tour="region-filter" className="flex rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium">
+        <div
+          role="group"
+          aria-label="Region filter"
+          data-tour="region-filter"
+          className="hidden rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium sm:flex"
+        >
           {(['All', ...REGIONS] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => onRegionChange(value)}
               aria-pressed={region === value}
-              className={`rounded-[0.6rem] px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 ${
-                region === value ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'
-              }`}
+              className={cn(
+                'rounded-[0.6rem] px-2.5 py-2 transition-colors',
+                focusRing,
+                region === value ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50',
+              )}
             >
               {value}
             </button>
           ))}
         </div>
-        <div data-tour="month-nav" className="flex items-center gap-2.5">
-          <button type="button" onClick={onToday} className={`${outlineBtn} rounded-xl px-4`}>
-            Today
-          </button>
-          <div className="flex">
-            <button type="button" onClick={onPrev} aria-label="Previous month" className={`${outlineBtn} w-11 rounded-l-xl`}>
-              <ChevronLeft className="size-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={onNext}
-              aria-label="Next month"
-              className={`${outlineBtn} -ml-px w-11 rounded-r-xl`}
-            >
-              <ChevronRight className="size-4" aria-hidden />
-            </button>
-          </div>
-        </div>
-        {onImport && (
-          <button type="button" onClick={onImport} data-tour="import" className={`${outlineBtn} rounded-xl px-4`}>
-            Import from portal
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onAdd}
-          data-tour="add-show"
-          className="ml-auto inline-flex h-11 items-center gap-1.5 rounded-xl bg-neutral-900 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
-        >
-          <Plus className="size-4" aria-hidden />
-          Add show
-        </button>
-        <HelpMenu onTour={onTour} onFaq={onFaq} />
       </div>
+
+      <div className="flex items-center gap-2 sm:hidden">
+        <select
+          aria-label="Region filter"
+          data-tour="region-filter"
+          value={region}
+          onChange={(e) => onRegionChange(e.target.value as Region | 'All')}
+          className={cn('h-11 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-800', focusRing)}
+        >
+          <option value="All">All regions</option>
+          {REGIONS.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={onToday} data-tour="month-nav" className={`${outlineBtn} shrink-0 rounded-xl px-4`}>
+          Today
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={onAdd}
+        data-tour="add-show"
+        aria-label="Add show"
+        className="fixed bottom-5 right-5 z-30 inline-flex size-14 items-center justify-center rounded-full bg-neutral-900 text-white shadow-lg transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 sm:hidden"
+      >
+        <Plus className="size-6" aria-hidden />
+      </button>
     </header>
   )
 }
@@ -191,7 +269,7 @@ export function Legend({
           </li>
         )}
       </ul>
-      <div data-tour="sync-status" className="flex items-center gap-3">
+      <div data-tour="sync-status" className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {portalSyncedAt && (
           <p className={stale ? 'font-medium text-amber-600' : 'text-neutral-500'}>
             Portal synced {timeAgo(portalSyncedAt)}

@@ -24,6 +24,7 @@ type Props = {
   past?: boolean
   emphasis?: 'on' | 'off'
   decideBy?: DecideBy | null
+  previewAlign?: 'left' | 'right'
 }
 
 type CardTag = 'Sellout likely' | 'Behind' | 'Ahead' | 'LP'
@@ -150,11 +151,13 @@ function HoverPreview({
   match,
   past,
   decideBy,
+  align,
 }: {
   show: Show
   match?: PortalMatch
   past: boolean
   decideBy?: DecideBy | null
+  align: 'left' | 'right'
 }) {
   const projection = match?.projection
   const range = projection ? projectedRange(projection) : null
@@ -173,7 +176,12 @@ function HoverPreview({
             : null
 
   return (
-    <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-72 rounded-lg border border-neutral-300 bg-background p-3 text-[11px] leading-snug text-foreground opacity-0 shadow-lg transition-opacity delay-500 duration-150 group-hover:block group-hover:opacity-100 md:block">
+    <div
+      className={cn(
+        'pointer-events-none absolute top-full z-30 mt-2 hidden w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-neutral-300 bg-background p-3 text-[11px] leading-snug text-foreground opacity-0 shadow-lg transition-opacity delay-500 duration-150 sm:group-hover:block sm:group-hover:opacity-100 md:block',
+        align === 'right' ? 'right-0' : 'left-0',
+      )}
+    >
       <dl className="flex flex-col gap-1.5">
         <PreviewRow label="Venue">{show.venue || show.area || 'Venue TBD'}</PreviewRow>
         <PreviewRow label="Date">{formatLongDate(show.date)}</PreviewRow>
@@ -221,7 +229,7 @@ function HoverPreview({
   )
 }
 
-export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy }: Props) {
+export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy, previewAlign = 'left' }: Props) {
   const styles = CATEGORY_STYLES[show.category]
   const cancelled = show.status === 'Cancelled'
   const solid = show.status === 'Confirmed'
@@ -262,7 +270,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
           {show.status}
         </span>
       )}
-      <span className={cn('block text-sm leading-snug', tentative ? 'font-normal text-[#6F685D]' : 'font-semibold', !show.venue && 'opacity-60')}>
+      <span className={cn('block whitespace-normal break-words text-sm leading-snug', tentative ? 'font-normal text-[#6F685D]' : 'font-semibold', !show.venue && 'opacity-60')}>
         {venueName}
       </span>
       <span className={cn('flex items-center gap-1.5 text-xs leading-snug', tentative ? 'text-[#6F685D]' : styles.sub)}>
@@ -300,7 +308,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
           <Tag tag={tag} />
         </span>
       )}
-      <HoverPreview show={show} match={match} past={past} decideBy={decideBy} />
+      <HoverPreview show={show} match={match} past={past} decideBy={decideBy} align={previewAlign} />
     </button>
   )
 }

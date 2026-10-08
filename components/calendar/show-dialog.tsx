@@ -60,7 +60,7 @@ type Props = {
 
 const numStr = (n: number | null | undefined) => (n == null ? '' : String(n))
 const inputCls =
-  'h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-[15px] text-neutral-900 placeholder:text-neutral-300 transition-colors focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900'
+  'h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-base sm:text-[15px] text-neutral-900 placeholder:text-neutral-300 transition-colors focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900'
 
 function Field({
   label,
@@ -462,7 +462,7 @@ export function ShowDialog({
       onClick={(e) => {
         if (e.target === ref.current) onClose()
       }}
-      className="m-auto max-h-[min(92dvh,52rem)] w-[calc(100%-1.5rem)] max-w-xl overflow-hidden rounded-3xl bg-white p-0 text-neutral-900 shadow-2xl backdrop:bg-neutral-900/30 backdrop:backdrop-blur-[2px]"
+      className="m-auto max-h-[min(92dvh,52rem)] w-[calc(100%-1.5rem)] max-w-xl overflow-hidden rounded-3xl max-sm:mb-0 max-sm:max-h-[94dvh] max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none bg-white p-0 text-neutral-900 shadow-2xl backdrop:bg-neutral-900/30 backdrop:backdrop-blur-[2px]"
     >
       <form onSubmit={submit} className="flex max-h-[inherit] flex-col">
         <div className="flex items-start justify-between gap-4 border-b border-neutral-100 px-6 pb-5 pt-6 sm:px-8">

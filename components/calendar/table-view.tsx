@@ -359,6 +359,62 @@ function exportCsv(ym: string, rows: Row[]) {
   URL.revokeObjectURL(url)
 }
 
+function RowCard({ row, onOpen }: { row: Row; onOpen: (show: Show) => void }) {
+  const { show, c, cancelled } = row
+  const stats: [string, string][] = [
+    ['Confirmed', c.confirmed || '—'],
+    ['Locked in', formatCurrency(row.locked)],
+    ['Projected', c.projRev != null ? formatCurrency(c.projRev) : '—'],
+  ]
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(show)}
+      className={cn(
+        'flex w-full flex-col gap-2.5 rounded-xl border border-neutral-200 bg-white p-3.5 text-left transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900',
+        cancelled && 'text-neutral-400',
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={cn('break-words font-semibold text-neutral-900', cancelled && 'font-normal text-neutral-400 line-through')}>
+            {show.venue || 'Venue TBD'}
+          </p>
+          <p className="text-sm tabular-nums text-neutral-500">
+            {formatShortWeekday(show.date)} · {formatDayShort(show.date)}
+          </p>
+        </div>
+        {c.pace && !cancelled && (
+          <span
+            className={cn(
+              'shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] font-semibold',
+              c.pace === 'Behind' ? 'bg-red-100 text-red-700' : c.pace === 'Ahead' ? 'bg-emerald-100 text-emerald-700' : 'bg-neutral-100 text-neutral-600',
+            )}
+          >
+            {c.pace}
+          </span>
+        )}
+      </div>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-700">
+        <span className="inline-flex items-center gap-1.5">
+          <span className={cn('size-2.5 shrink-0 rounded-full', CATEGORY_STYLES[show.category].dot)} aria-hidden />
+          {show.format}
+        </span>
+        <span aria-hidden>·</span>
+        <span>{statusLabel(show.status)}</span>
+      </p>
+      <dl className="grid grid-cols-3 gap-2 border-t border-neutral-100 pt-2.5 text-sm">
+        {stats.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-xs text-neutral-500">{label}</dt>
+            <dd className="break-words font-medium tabular-nums text-neutral-900">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </button>
+  )
+}
+
 const th = 'px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-neutral-500'
 const td = 'px-3 py-2.5 align-top'
 const numeric = 'whitespace-nowrap text-right tabular-nums'
@@ -406,7 +462,7 @@ export function TableView({ ym, todayISO, shows, portal, sends, onOpen }: Props)
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-end gap-4">
-        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
+        <label className="hidden cursor-pointer items-center gap-2 text-sm text-neutral-700 sm:inline-flex">
           <input
             type="checkbox"
             checked={showAll}
@@ -426,7 +482,24 @@ export function TableView({ ym, todayISO, shows, portal, sends, onOpen }: Props)
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+      <div className="flex flex-col gap-4 sm:hidden">
+        {rows.length === 0 && <p className="py-10 text-center text-neutral-400">No shows this month.</p>}
+        {weeks.map((week) => (
+          <section key={week.start} aria-label={formatWeekLabel(week.start)} className="flex flex-col gap-2">
+            <h3 className="text-[11px] font-medium uppercase tracking-wider text-neutral-400">{formatWeekLabel(week.start)}</h3>
+            {week.rows.map((row) => (
+              <RowCard key={row.show.id} row={row} onOpen={onOpen} />
+            ))}
+          </section>
+        ))}
+        {rows.length > 0 && (
+          <p className="text-sm font-medium text-neutral-900">
+            Total ({active.length} non-cancelled): {formatCurrency(totals.revenue)}
+          </p>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-2xl border border-neutral-200 sm:block">
         <table className={cn('w-full border-collapse text-sm', showAll ? 'min-w-[3500px]' : 'min-w-[900px]')}>
           <thead className="border-b border-neutral-200 bg-neutral-50/60">
             <tr>
