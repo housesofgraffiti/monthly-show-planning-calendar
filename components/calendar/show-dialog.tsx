@@ -6,6 +6,7 @@ import useSWR from 'swr'
 import { cn } from '@/lib/utils'
 import { formatLongDate } from '@/lib/dates'
 import {
+  ADJUSTMENT_REASONS,
   CATEGORIES,
   DATE_RE,
   DEFAULT_TICKET_PRICES,
@@ -16,6 +17,7 @@ import {
   REVENUE_TYPES,
   STATUS_LABELS,
   STATUSES,
+  type AdjustmentReason,
   type Category,
   type Organizer,
   type Region,
@@ -35,6 +37,7 @@ import {
   type PortalMatch,
   type PortalSuggestion,
 } from '@/lib/portal'
+import { modelTotal, suggestedTotal } from '@/lib/adjustments'
 import { markersOn, type DayMarker } from '@/lib/markers'
 import { CATEGORY_STYLES } from './category-styles'
 
@@ -112,7 +115,92 @@ function MoneyInput({ id, value, onChange, placeholder = '0' }: { id: string; va
   )
 }
 
-function PortalSummary({ match }: { match: PortalMatch }) {
+function EstimateEditor({
+  idPrefix,
+  match,
+  value,
+  reason,
+  note,
+  onValue,
+  onReason,
+  onNote,
+  onClear,
+}: {
+  idPrefix: string
+  match: PortalMatch
+  value: string
+  reason: AdjustmentReason | null
+  note: string
+  onValue: (v: string) => void
+  onReason: (r: AdjustmentReason) => void
+  onNote: (v: string) => void
+  onClear: () => void
+}) {
+  const model = modelTotal(match)
+  const range = match.projection ? rangeLabel(match.projection) : null
+  const hasAdjustment = value !== '' || reason != null || note !== ''
+
+  return (
+    <div className="flex flex-col gap-2.5 border-t border-neutral-200 pt-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <label htmlFor={`${idPrefix}-estimate`} className="text-sm font-medium text-neutral-700">
+          Your estimate
+        </label>
+        <input
+          id={`${idPrefix}-estimate`}
+          inputMode="numeric"
+          value={value}
+          placeholder="Total tickets"
+          onChange={(e) => onValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          className="h-9 w-32 rounded-lg border border-neutral-200 bg-white px-3 text-sm tabular-nums text-neutral-900 placeholder:text-neutral-300 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+        />
+        <span className="text-xs text-neutral-500 tabular-nums">
+          {model != null ? `Model: ~${Math.round(model)}${range ? ` (${range})` : ''}` : 'No model projection yet'}
+        </span>
+      </div>
+      <div role="group" aria-label="Reason for your estimate" className="flex flex-wrap gap-1.5">
+        {ADJUSTMENT_REASONS.map((r) => (
+          <button
+            key={r}
+            type="button"
+            aria-pressed={reason === r}
+            onClick={() => onReason(r)}
+            className={cn(
+              'rounded-full border px-2.5 py-1 text-xs transition-colors',
+              reason === r
+                ? 'border-neutral-900 bg-neutral-900 text-white'
+                : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900',
+            )}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
+      {value !== '' && reason == null && <p className="text-xs text-red-600">Pick a reason for your estimate.</p>}
+      {value !== '' && (
+        <input
+          aria-label="Estimate note"
+          value={note}
+          maxLength={500}
+          placeholder="Note (optional)"
+          onChange={(e) => onNote(e.target.value)}
+          className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 placeholder:text-neutral-300 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+        />
+      )}
+      {hasAdjustment && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="w-fit text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-900"
+        >
+          Clear adjustment
+        </button>
+      )}
+    </div>
+  )
+}
+
+function PortalSummary({ match, estimate }: { match: PortalMatch; estimate?: React.ReactNode }) {
   const p = match.projection
   const range = p ? rangeLabel(p) : null
   const rows: [string, React.ReactNode][] = []
@@ -151,7 +239,7 @@ function PortalSummary({ match }: { match: PortalMatch }) {
     ])
   }
   if (p?.paceLabel) rows.push(['Pace', capitalize(p.paceLabel)])
-  if (rows.length === 0) return null
+  if (rows.length === 0 && !estimate) return null
 
   return (
     <section aria-label="From portal" className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-4">
@@ -170,6 +258,7 @@ function PortalSummary({ match }: { match: PortalMatch }) {
       {p?.selloutLikely && (
         <p className="w-fit rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Sellout likely</p>
       )}
+      {estimate}
     </section>
   )
 }
@@ -213,6 +302,9 @@ export function ShowDialog({
   )
   const [portalEventId, setPortalEventId] = useState(show?.portalEventId ?? '')
   const [notes, setNotes] = useState(show?.notes ?? '')
+  const [adjustedTotal, setAdjustedTotal] = useState(numStr(show?.adjustedTotal))
+  const [adjustmentReason, setAdjustmentReason] = useState<AdjustmentReason | null>(show?.adjustmentReason ?? null)
+  const [adjustmentNote, setAdjustmentNote] = useState(show?.adjustmentNote ?? '')
   const [pending, setPending] = useState<'save' | 'delete' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -249,9 +341,28 @@ export function ShowDialog({
     pickFormat(FORMATS[next][0])
   }
 
+  const pickReason = (reason: AdjustmentReason) => {
+    setAdjustmentReason(reason)
+    const suggestion = suggestedTotal(reason, match ? modelTotal(match) : null)
+    if (suggestion != null) setAdjustedTotal(String(suggestion))
+  }
+
+  const clearAdjustment = () => {
+    setAdjustedTotal('')
+    setAdjustmentReason(null)
+    setAdjustmentNote('')
+  }
+
+  const canAdjust = Boolean(match) && !isFlat && organizedBy !== 'Local Producer'
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    const estimate = adjustedTotal === '' ? null : Number(adjustedTotal)
+    if (estimate != null && adjustmentReason == null) {
+      setError('Pick a reason for your estimate, or clear the adjustment.')
+      return
+    }
     setPending('save')
     try {
       await onSave({
@@ -274,6 +385,10 @@ export function ShowDialog({
         venueFee: venueFee === '' ? null : Number(venueFee),
         merch,
         eventPlanner,
+        adjustedTotal: estimate,
+        adjustmentReason: estimate == null ? null : adjustmentReason,
+        adjustmentNote: estimate == null ? '' : adjustmentNote,
+        modelTotalAtAdjustment: show?.modelTotalAtAdjustment ?? null,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save this show.')
@@ -486,7 +601,26 @@ export function ShowDialog({
             )}
           </Field>
 
-          {match && <PortalSummary match={match} />}
+          {match && (
+            <PortalSummary
+              match={match}
+              estimate={
+                canAdjust ? (
+                  <EstimateEditor
+                    idPrefix={id}
+                    match={match}
+                    value={adjustedTotal}
+                    reason={adjustmentReason}
+                    note={adjustmentNote}
+                    onValue={setAdjustedTotal}
+                    onReason={pickReason}
+                    onNote={setAdjustmentNote}
+                    onClear={clearAdjustment}
+                  />
+                ) : undefined
+              }
+            />
+          )}
 
           <Field label="Notes" htmlFor={f('notes')} optional>
             <textarea

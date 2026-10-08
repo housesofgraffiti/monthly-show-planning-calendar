@@ -25,6 +25,17 @@ export type Organizer = (typeof ORGANIZERS)[number]
 export const REVENUE_TYPES = ['Ticketed', 'Flat fee'] as const
 export type RevenueType = (typeof REVENUE_TYPES)[number]
 
+export const ADJUSTMENT_REASONS = [
+  'Competing event',
+  'Holiday weekend',
+  'Billed headliner',
+  'Heavy promotion',
+  'Artist draw',
+  'Weather',
+  'Other',
+] as const
+export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number]
+
 export const FORMATS: Record<Category, readonly string[]> = {
   Core: [
     'Discovery',
@@ -80,6 +91,12 @@ export type Show = {
   flatFee: number | null
   portalEventId: string
   notes: string
+  // The team's own estimate of the final total tickets. Never written to projections.
+  adjustedTotal: number | null
+  adjustmentReason: AdjustmentReason | null
+  adjustmentNote: string
+  // The model's projected total when the adjustment was saved. Set by the server, not editable.
+  modelTotalAtAdjustment: number | null
 }
 
 export type ShowInput = Omit<Show, 'id'> & { id?: string }
@@ -151,6 +168,12 @@ export function validateShowInput(raw: unknown): ShowInput {
   const flatFee = cleanNumber(r.flatFee)
   if (revenueType === 'Flat fee' && flatFee == null) throw new Error('Enter the flat fee amount')
 
+  const adjustedTotal = cleanNumber(r.adjustedTotal, { integer: true, max: 100_000 })
+  const adjustmentReason = adjustedTotal == null ? null : (r.adjustmentReason as AdjustmentReason)
+  if (adjustedTotal != null && !ADJUSTMENT_REASONS.includes(adjustmentReason as AdjustmentReason)) {
+    throw new Error('Pick a reason for your estimate')
+  }
+
   return {
     id: r.id === undefined ? undefined : isUuid(r.id) ? r.id : (() => { throw new Error('Invalid id') })(),
     date,
@@ -171,6 +194,11 @@ export function validateShowInput(raw: unknown): ShowInput {
     flatFee,
     portalEventId: cleanText(r.portalEventId, 120),
     notes: cleanText(r.notes, 4000),
+    adjustedTotal,
+    adjustmentReason,
+    adjustmentNote: adjustedTotal == null ? '' : cleanText(r.adjustmentNote, 500),
+    modelTotalAtAdjustment:
+      adjustedTotal == null ? null : cleanNumber(r.modelTotalAtAdjustment, { integer: true, max: 100_000 }),
   }
 }
 

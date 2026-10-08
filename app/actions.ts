@@ -30,6 +30,8 @@ const NEW_FIELDS_HINT =
   'This needs the new database columns/tables. Run scripts/003_add_revenue_and_markers.sql in Supabase, then try again.'
 const EVENT_PLANNER_HINT =
   'Event planner needs a new database column. Run scripts/004_add_event_planner.sql in Supabase, then try again.'
+const ADJUSTMENT_HINT =
+  'Your estimate needs new database columns. Run scripts/005_add_projection_adjustments.sql in Supabase, then try again.'
 
 type PgError = { code?: string; message: string }
 type PgResult = { data: unknown; error: PgError | null }
@@ -59,31 +61,66 @@ type ShowRow = {
   flat_fee: number | string | null
   portal_event_id: string | null
   notes: string | null
+  adjusted_total: number | string | null
+  adjustment_reason: Show['adjustmentReason']
+  adjustment_note: string | null
+  model_total_at_adjustment: number | string | null
 }
 
 const BASE_SHOW_COLUMNS =
   'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, portal_event_id, notes'
 const REGION_SHOW_COLUMNS = `${BASE_SHOW_COLUMNS}, region, organized_by`
 const REVENUE_SHOW_COLUMNS = `${REGION_SHOW_COLUMNS}, venue_fee, merch, revenue_type, flat_fee`
-const SHOW_COLUMNS = `${REVENUE_SHOW_COLUMNS}, event_planner`
+const EVENT_PLANNER_SHOW_COLUMNS = `${REVENUE_SHOW_COLUMNS}, event_planner`
+const SHOW_COLUMNS = `${EVENT_PLANNER_SHOW_COLUMNS}, adjusted_total, adjustment_reason, adjustment_note, model_total_at_adjustment`
 
 const toNum = (v: number | string | null) => (v == null ? null : Number(v))
 
-// Newer columns come from scripts/002, 003 and 004. Until those migrations run, retry with
+// Newer columns come from scripts/002 to 005. Until those migrations run, retry with
 // the older column sets so the app keeps working and just defaults the missing fields.
 type ColumnTier = { columns: string; omit: string[] }
 const REVENUE_COLUMNS = ['venue_fee', 'merch', 'revenue_type', 'flat_fee']
+const ADJUSTMENT_COLUMNS = ['adjusted_total', 'adjustment_reason', 'adjustment_note', 'model_total_at_adjustment']
 const COLUMN_TIERS: ColumnTier[] = [
   { columns: SHOW_COLUMNS, omit: [] },
-  { columns: REVENUE_SHOW_COLUMNS, omit: ['event_planner'] },
-  { columns: REGION_SHOW_COLUMNS, omit: [...REVENUE_COLUMNS, 'event_planner'] },
-  { columns: BASE_SHOW_COLUMNS, omit: [...REVENUE_COLUMNS, 'event_planner', 'region', 'organized_by'] },
+  { columns: EVENT_PLANNER_SHOW_COLUMNS, omit: ADJUSTMENT_COLUMNS },
+  { columns: REVENUE_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, 'event_planner'] },
+  { columns: REGION_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, ...REVENUE_COLUMNS, 'event_planner'] },
+  {
+    columns: BASE_SHOW_COLUMNS,
+    omit: [...ADJUSTMENT_COLUMNS, ...REVENUE_COLUMNS, 'event_planner', 'region', 'organized_by'],
+  },
 ]
 
 function isMissingColumns(error: PgError | null) {
   if (!error) return false
   if (error.code === '42703' || error.code === 'PGRST204') return true
-  return /region|organized_by|venue_fee|merch|event_planner|revenue_type|flat_fee/.test(error.message)
+  return /region|organized_by|venue_fee|merch|event_planner|revenue_type|flat_fee|adjusted_total|adjustment_|model_total/.test(
+    error.message,
+  )
+}
+
+// Read-only: the model's latest projected total for a portal event. Nothing here writes to
+// projections or portal_events.
+async function readModelTotal(eventId: string): Promise<number | null> {
+  if (!eventId) return null
+  const supabase = getSupabaseAdmin()
+  const read = (columns: string) =>
+    supabase
+      .from('projections')
+      .select(columns)
+      .eq('event_id', eventId)
+      .order('computed_at', { ascending: false, nullsFirst: false })
+      .limit(1) as unknown as PromiseLike<PgResult>
+  let result = await read('projected_tickets, projected_total')
+  if (isMissingColumns(result.error)) result = await read('projected_tickets')
+  if (result.error) {
+    console.error('Could not read the model total', result.error.message)
+    return null
+  }
+  const row = ((result.data ?? []) as { projected_tickets?: number | string | null; projected_total?: number | string | null }[])[0]
+  const value = toNum(row?.projected_total ?? row?.projected_tickets ?? null)
+  return value == null || !Number.isFinite(value) ? null : Math.round(value)
 }
 
 async function runTiers(
@@ -132,6 +169,10 @@ function fromRow(row: ShowRow): Show {
     flatFee: toNum(row.flat_fee),
     portalEventId: row.portal_event_id ?? '',
     notes: row.notes ?? '',
+    adjustedTotal: toNum(row.adjusted_total ?? null),
+    adjustmentReason: row.adjustment_reason ?? null,
+    adjustmentNote: row.adjustment_note ?? '',
+    modelTotalAtAdjustment: toNum(row.model_total_at_adjustment ?? null),
   }
 }
 
@@ -689,8 +730,30 @@ export async function saveShow(raw: unknown): Promise<Show> {
     flat_fee: input.flatFee,
     portal_event_id: input.portalEventId || null,
     notes: input.notes || null,
+    adjusted_total: input.adjustedTotal,
+    adjustment_reason: input.adjustmentReason,
+    adjustment_note: input.adjustmentNote || null,
+    model_total_at_adjustment: null as number | null,
   }
   const supabase = getSupabaseAdmin()
+
+  // Stamp the model's projected total at the moment the estimate is set or changed. Saving other
+  // edits to the same estimate keeps the original stamp.
+  if (input.adjustedTotal != null) {
+    if (input.id) {
+      const previous = await supabase
+        .from('shows')
+        .select('adjusted_total, model_total_at_adjustment')
+        .eq('id', input.id)
+        .maybeSingle()
+      const prev = previous.data as { adjusted_total: number | null; model_total_at_adjustment: number | null } | null
+      if (!previous.error && prev && prev.adjusted_total === input.adjustedTotal && prev.model_total_at_adjustment != null) {
+        row.model_total_at_adjustment = Number(prev.model_total_at_adjustment)
+      }
+    }
+    if (row.model_total_at_adjustment == null) row.model_total_at_adjustment = await readModelTotal(input.portalEventId)
+  }
+
   const runSave = (payload: Record<string, unknown>, columns: string) => {
     const query = input.id
       ? supabase.from('shows').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', input.id)
@@ -701,9 +764,17 @@ export async function saveShow(raw: unknown): Promise<Show> {
   // Don't silently drop real revenue-field values if the migration hasn't run yet.
   const usesRevenueFields = input.revenueType === 'Flat fee' || input.merch || input.venueFee != null
   const usesEventPlanner = input.eventPlanner
-  const tiers = usesEventPlanner ? COLUMN_TIERS.slice(0, 1) : usesRevenueFields ? COLUMN_TIERS.slice(0, 2) : COLUMN_TIERS
+  const usesAdjustment = input.adjustedTotal != null
+  const tiers = usesAdjustment
+    ? COLUMN_TIERS.slice(0, 1)
+    : usesEventPlanner
+      ? COLUMN_TIERS.slice(0, 2)
+      : usesRevenueFields
+        ? COLUMN_TIERS.slice(0, 3)
+        : COLUMN_TIERS
   const { data, error } = await runTiers((tier) => runSave(omitKeys(row, tier.omit), tier.columns), tiers)
   if (error) {
+    if (usesAdjustment && isMissingColumns(error)) throw new Error(ADJUSTMENT_HINT)
     if (usesEventPlanner && isMissingColumns(error)) throw new Error(EVENT_PLANNER_HINT)
     if (usesRevenueFields && isMissingColumns(error)) throw new Error(NEW_FIELDS_HINT)
     throw new Error(error.message)

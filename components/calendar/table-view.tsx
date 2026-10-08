@@ -18,6 +18,7 @@ import {
   type PortalMatch,
 } from '@/lib/portal'
 import { isFlatFee, isLocalProducer, showMoney, showRevenueOn } from '@/lib/revenue'
+import { modelTotal } from '@/lib/adjustments'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -80,6 +81,10 @@ type Row = {
   cancelled: boolean
   flat: boolean
   c: ReturnType<typeof portalCells>
+  model: number | null
+  adjusted: number | null
+  reason: string
+  finalTotal: number | null
   locked: number
   revenue: number
 }
@@ -258,6 +263,28 @@ const COLUMNS: Column[] = [
     csv: (r) => r.c.projTickets ?? '',
   },
   { id: 'projRange', label: 'Proj. Range', right: true, cell: (r) => r.c.projRange, csv: (r) => r.c.projRange },
+  {
+    id: 'modelProj',
+    label: 'Model proj.',
+    right: true,
+    cell: (r) => r.model ?? '',
+    csv: (r) => r.model ?? '',
+  },
+  {
+    id: 'adjusted',
+    label: 'Adjusted',
+    right: true,
+    cell: (r) => r.adjusted ?? '',
+    csv: (r) => r.adjusted ?? '',
+  },
+  { id: 'adjustmentReason', label: 'Reason', cell: (r) => r.reason, csv: (r) => r.reason },
+  {
+    id: 'finalTotal',
+    label: 'Final total',
+    right: true,
+    cell: (r) => r.finalTotal ?? '',
+    csv: (r) => r.finalTotal ?? '',
+  },
   { id: 'revRange', label: 'Rev. Range', csvOnly: true, csv: (r) => r.c.revRange },
   {
     id: 'confidence',
@@ -286,12 +313,19 @@ const COLUMNS: Column[] = [
 
 function buildRow(show: Show, portal: PortalMap | undefined, todayISO: string): Row {
   const match = portalFor(show, portal)
+  const past = isPastShow(show, todayISO)
+  const ticketed = !isFlatFee(show) && !isLocalProducer(show)
+  const model = ticketed ? modelTotal(match) : null
   return {
     show,
     cancelled: show.status === 'Cancelled',
     flat: isFlatFee(show),
     c: portalCells(show, match),
-    locked: showMoney(show, match, isPastShow(show, todayISO)).lockedIn,
+    model: model != null ? Math.round(model) : null,
+    adjusted: ticketed ? show.adjustedTotal : null,
+    reason: ticketed && show.adjustedTotal != null ? (show.adjustmentReason ?? '') : '',
+    finalTotal: ticketed && past && match?.hasEvent ? (confirmedTotal(match) ?? null) : null,
+    locked: showMoney(show, match, past).lockedIn,
     revenue: showRevenueOn(show, portal, todayISO),
   }
 }
@@ -375,7 +409,7 @@ export function TableView({ ym, todayISO, shows, portal, onOpen }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-200">
-        <table className={cn('w-full border-collapse text-sm', showAll ? 'min-w-[2700px]' : 'min-w-[900px]')}>
+        <table className={cn('w-full border-collapse text-sm', showAll ? 'min-w-[3100px]' : 'min-w-[900px]')}>
           <thead className="border-b border-neutral-200 bg-neutral-50/60">
             <tr>
               {visible.map((col) => (
