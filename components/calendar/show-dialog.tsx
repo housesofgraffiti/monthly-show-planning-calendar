@@ -296,6 +296,7 @@ export function ShowDialog({
   const [venueFee, setVenueFee] = useState(numStr(show?.venueFee))
   const [merch, setMerch] = useState(show?.merch ?? false)
   const [eventPlanner, setEventPlanner] = useState(show?.eventPlanner ?? false)
+  const [merchandised, setMerchandised] = useState(show?.merchandised ?? false)
   const [area, setArea] = useState(show?.area ?? '')
   const [venue, setVenue] = useState(show?.venue ?? '')
   const [tickets, setTickets] = useState(numStr(show?.tickets))
@@ -390,6 +391,7 @@ export function ShowDialog({
         venueFee: venueFee === '' ? null : Number(venueFee),
         merch,
         eventPlanner,
+        merchandised,
         adjustedTotal: estimate,
         adjustmentReason: estimate == null ? null : adjustmentReason,
         adjustmentNote: estimate == null ? '' : adjustmentNote,
@@ -573,6 +575,18 @@ export function ShowDialog({
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:gap-8">
+            <label className="flex items-start gap-3 text-[15px] text-neutral-700">
+              <input
+                type="checkbox"
+                checked={merchandised}
+                onChange={(e) => setMerchandised(e.target.checked)}
+                className="mt-0.5 size-5 rounded border-neutral-300 accent-neutral-900"
+              />
+              <span>
+                Merchandised
+                <span className="block text-xs text-neutral-500">Event page updated for this show</span>
+              </span>
+            </label>
             <label className="flex items-center gap-3 text-[15px] text-neutral-700">
               <input
                 type="checkbox"
