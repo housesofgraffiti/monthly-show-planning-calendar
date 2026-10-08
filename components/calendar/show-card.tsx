@@ -1,4 +1,4 @@
-import { ClipboardList, ShoppingBag } from 'lucide-react'
+import { ClipboardList, ShoppingBag, SquareCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatLongDate } from '@/lib/dates'
 import { formatCurrency, statusLabel, type Show } from '@/lib/shows'
@@ -264,6 +264,12 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
           <span className="shrink-0" title="Event planner">
             <ClipboardList className="size-3" aria-hidden />
             <span className="sr-only">Event planner</span>
+          </span>
+        )}
+        {show.merchandised && (
+          <span className="shrink-0" title="Merchandised">
+            <SquareCheck className="size-3" aria-hidden />
+            <span className="sr-only">Merchandised</span>
           </span>
         )}
       </span>
