@@ -39,14 +39,18 @@ function hasTicketsLine(match: PortalMatch, past: boolean) {
 }
 
 function Tag({ tag }: { tag: CardTag }) {
-  return <span className={cn('shrink-0 rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>{tag}</span>
+  return (
+    <span className={cn('shrink-0 whitespace-nowrap rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>
+      {tag}
+    </span>
+  )
 }
 
 function TicketsLine({ match, past, tag, className }: { match: PortalMatch; past: boolean; tag?: CardTag | null; className: string }) {
   if (!hasTicketsLine(match, past)) return null
   if (past) {
     return (
-      <span className={cn('mt-0.5 flex items-center justify-between gap-2 text-[11px] leading-snug tabular-nums', className)}>
+      <span className={cn('mt-0.5 flex min-w-0 items-center justify-between gap-2 text-[11px] leading-snug tabular-nums', className)}>
         <span>{confirmedLabel(match)}</span>
         {tag && <Tag tag={tag} />}
       </span>
@@ -60,13 +64,13 @@ function TicketsLine({ match, past, tag, className }: { match: PortalMatch; past
   const lowConfidence = projection?.confidence === 'low'
 
   return (
-    <span className={cn('mt-1 flex items-center gap-2 text-[11px] leading-snug tabular-nums', className)}>
+    <span className={cn('mt-1 flex min-w-0 items-center gap-2 text-[11px] leading-snug tabular-nums', className)}>
       {percent != null && (
         <span aria-hidden className="h-1 min-w-4 flex-1 overflow-hidden rounded-full bg-current/15">
           <span className="block h-full rounded-full bg-current opacity-70" style={{ width: `${percent}%` }} />
         </span>
       )}
-      <span className="shrink-0">
+      <span className="min-w-0 flex-1 truncate">
         {match.hasEvent && confirmedLabel(match)}
         {projected != null && (
           <span className={cn(lowConfidence && 'opacity-70')}>
