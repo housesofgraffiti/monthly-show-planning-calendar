@@ -365,7 +365,7 @@ export function ShowDialog({
     setAdjustmentNote('')
   }
 
-  const canAdjust = Boolean(match) && !isFlat && organizedBy !== 'Local Producer'
+  const canAdjust = Boolean(match) && !isFlat
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
