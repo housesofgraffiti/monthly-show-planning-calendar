@@ -46,13 +46,12 @@ function Tag({ tag }: { tag: CardTag }) {
   )
 }
 
-function TicketsLine({ match, past, tag, className }: { match: PortalMatch; past: boolean; tag?: CardTag | null; className: string }) {
+function TicketsLine({ match, past, className }: { match: PortalMatch; past: boolean; className: string }) {
   if (!hasTicketsLine(match, past)) return null
   if (past) {
     return (
       <span className={cn('mt-0.5 flex min-w-0 items-center justify-between gap-2 text-[11px] leading-snug tabular-nums', className)}>
-        <span>{confirmedLabel(match)}</span>
-        {tag && <Tag tag={tag} />}
+        <span>        {confirmedLabel(match)}</span>
       </span>
     )
   }
@@ -78,7 +77,6 @@ function TicketsLine({ match, past, tag, className }: { match: PortalMatch; past
           </span>
         )}
       </span>
-      {tag && <Tag tag={tag} />}
     </span>
   )
 }
@@ -153,12 +151,12 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
         )}
       </span>
       {!flat && !local && match && <TicketsLine match={match} past={past} tag={tag} className={styles.sub} />}
-      {(!match || flat || local || !hasTicketsLine(match, past)) && tag && (
+      {money && <MoneyLine money={money} className={styles.sub} />}
+      {tag && (
         <span className={cn('mt-1 flex justify-end', styles.sub)}>
           <Tag tag={tag} />
         </span>
       )}
-      {money && <MoneyLine money={money} className={styles.sub} />}
     </button>
   )
 }
