@@ -133,6 +133,11 @@ export function ImportPanel({ ym, getCandidates, onImport, onClose, onDone }: Pr
                       <span className="font-medium tabular-nums">{shortDate(c.date)}</span>
                       <span className="text-neutral-500">{formatShortWeekday(c.date)}</span>
                       <span className="min-w-0 truncate">{c.venue || 'No venue'}</span>
+                      {c.region !== 'LA' && (
+                        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-neutral-500">
+                          {c.region}
+                        </span>
+                      )}
                       <span className="ml-auto text-sm tabular-nums text-neutral-500">
                         {c.ticketsAvailable ?? '—'} tickets
                       </span>
