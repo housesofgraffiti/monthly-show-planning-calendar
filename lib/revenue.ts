@@ -1,5 +1,6 @@
 import type { Show } from './shows'
 import { isPastShow, type PortalMap, type PortalMatch, portalFor } from './portal'
+import { projectedRevenueFor } from './adjustments'
 
 export const isFlatFee = (show: Show) => show.revenueType === 'Flat fee'
 export const isLocalProducer = (show: Show) => show.organizedBy === 'Local Producer'
@@ -9,7 +10,8 @@ export function showRevenue(show: Show, match: PortalMatch | undefined, past: bo
   if (show.status === 'Cancelled') return 0
   if (isFlatFee(show)) return show.flatFee ?? 0
   if (past && match?.hasEvent) return match.revenue ?? 0
-  if (!past && match?.projection?.revenue != null) return match.projection.revenue
+  const projected = projectedRevenueFor(show, match, past)
+  if (!past && projected != null) return projected
   return show.projectedRevenue ?? 0
 }
 
@@ -32,7 +34,7 @@ export function showMoney(show: Show, match: PortalMatch | undefined, past: bool
   if (past) return { lockedIn: showRevenue(show, match, true), remaining: 0 }
 
   const sold = match?.hasEvent ? (match.revenue ?? 0) : 0
-  const projected = match?.projection?.revenue ?? show.projectedRevenue ?? 0
+  const projected = projectedRevenueFor(show, match, false) ?? show.projectedRevenue ?? 0
   return { lockedIn: sold, remaining: Math.max(0, projected - sold) }
 }
 
@@ -50,7 +52,7 @@ export function cardMoney(show: Show, match: PortalMatch | undefined, past: bool
     const amount = showRevenue(show, match, true)
     return amount > 0 ? { kind: 'actual', amount } : null
   }
-  const projection = match?.projection?.revenue
+  const projection = projectedRevenueFor(show, match, false)
   if (match && (match.hasEvent || projection != null)) {
     return {
       kind: 'linked',

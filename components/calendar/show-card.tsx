@@ -13,6 +13,7 @@ import {
   type PortalMatch,
 } from '@/lib/portal'
 import { cardMoney, isLocalProducer, type CardMoney } from '@/lib/revenue'
+import { activeAdjustment } from '@/lib/adjustments'
 import { CATEGORY_STYLES } from './category-styles'
 
 type Props = {
@@ -45,7 +46,7 @@ function pickTag(match: PortalMatch | undefined, past: boolean, flat: boolean, l
 
 function hasTicketsLine(match: PortalMatch, past: boolean) {
   if (past) return match.hasEvent
-  return match.hasEvent || projectedTotal(match.projection) != null
+  return match.hasEvent || (match.projection != null && projectedTotal(match.projection) != null)
 }
 
 function Tag({ tag }: { tag: CardTag }) {
@@ -56,17 +57,28 @@ function Tag({ tag }: { tag: CardTag }) {
   )
 }
 
-function TicketsLine({ match, past, className }: { match: PortalMatch; past: boolean; className: string }) {
+function TicketsLine({
+  show,
+  match,
+  past,
+  className,
+}: {
+  show: Show
+  match: PortalMatch
+  past: boolean
+  className: string
+}) {
   if (!hasTicketsLine(match, past)) return null
   if (past) {
     return <span className={cn('mt-0.5 block text-[11px] leading-snug tabular-nums', className)}>{confirmedLabel(match)}</span>
   }
 
   const projection = match.projection
-  const projected = projection ? projectedTotal(projection) : null
+  const adjusted = activeAdjustment(show, past)
+  const projected = adjusted ?? (projection ? projectedTotal(projection) : null)
   const capacity = match.ticketsAvailable
   const percent = capacity ? Math.min(100, Math.round(((confirmedTotal(match) ?? 0) / capacity) * 100)) : null
-  const lowConfidence = projection?.confidence === 'low'
+  const lowConfidence = adjusted == null && projection?.confidence === 'low'
 
   return (
     <span className={cn('mt-1 block text-[11px] leading-snug tabular-nums', className)}>
@@ -80,6 +92,7 @@ function TicketsLine({ match, past, className }: { match: PortalMatch; past: boo
         {projected != null && (
           <span className={cn(lowConfidence && 'opacity-70')}>
             {match.hasEvent && ' → '}~{Math.round(projected)}
+            {adjusted != null && ' adj'}
           </span>
         )}
       </span>
@@ -149,11 +162,19 @@ function HoverPreview({ show, match, past }: { show: Show; match?: PortalMatch; 
           </PreviewRow>
         )}
         {projection && (
-          <PreviewRow label="Projection">
+          <PreviewRow label={show.adjustedTotal != null ? 'Model' : 'Projection'}>
             {projectedTotal(projection) != null ? `~${Math.round(projectedTotal(projection)!)}` : '—'}
             {range ? ` (${Math.round(range[0])} to ${Math.round(range[1])})` : ''}
             {projection.confidence ? ` · ${capitalize(projection.confidence)}` : ''}
             {projection.paceLabel ? ` · ${capitalize(projection.paceLabel)}` : ''}
+          </PreviewRow>
+        )}
+        {show.adjustedTotal != null && (
+          <PreviewRow label="Your estimate">
+            ~{show.adjustedTotal}
+            {show.adjustmentReason ? ` · ${show.adjustmentReason}` : ''}
+            {show.modelTotalAtAdjustment != null ? ` · model was ~${show.modelTotalAtAdjustment}` : ''}
+            {show.adjustmentNote.trim() ? ` · ${show.adjustmentNote.trim()}` : ''}
           </PreviewRow>
         )}
         {revenueText && <PreviewRow label="Revenue">{revenueText}</PreviewRow>}
@@ -217,7 +238,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
           </span>
         )}
       </span>
-      {!flat && !local && match && <TicketsLine match={match} past={past} className={styles.sub} />}
+      {!flat && !local && match && <TicketsLine show={show} match={match} past={past} className={styles.sub} />}
       {money && <MoneyLine money={money} className={styles.sub} />}
       {tag && (
         <span className={cn('mt-1 flex justify-end', styles.sub)}>
