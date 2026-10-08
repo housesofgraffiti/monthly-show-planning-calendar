@@ -51,6 +51,17 @@ function hasTicketsLine(match: PortalMatch, past: boolean) {
   return match.hasEvent || (match.projection != null && projectedTotal(match.projection) != null)
 }
 
+function isUpcomingWithin14Days(date: string) {
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+  const days = (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
+  return days >= 0 && days <= 14
+}
+
 function Tag({ tag }: { tag: CardTag }) {
   return (
     <span className={cn('shrink-0 whitespace-normal break-words rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>
@@ -197,6 +208,7 @@ function HoverPreview({
         {revenueText && <PreviewRow label="Revenue">{revenueText}</PreviewRow>}
         {match?.ticketPrices && <PreviewRow label="Prices">{match.ticketPrices}</PreviewRow>}
         {match?.ticketMix && <PreviewRow label="Mix">{match.ticketMix}</PreviewRow>}
+        <PreviewRow label="Merchandised">{show.merchandised ? 'Merchandised' : 'Not Merchandised'}</PreviewRow>
         {show.merch && <PreviewRow label="Merch">Yes</PreviewRow>}
         {show.eventPlanner && <PreviewRow label="Event planner">Yes</PreviewRow>}
         {show.venueFee != null && <PreviewRow label="Venue fee">{formatCurrency(show.venueFee)}</PreviewRow>}
@@ -257,6 +269,9 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
       </span>
       {!flat && !local && match && <TicketsLine show={show} match={match} past={past} className={styles.sub} />}
       {money && <MoneyLine money={money} className={styles.sub} />}
+      {isUpcomingWithin14Days(show.date) && !show.merchandised && (
+        <span className="mt-1 block text-[10px] leading-snug text-neutral-500">Not Merchandised</span>
+      )}
       {tag && (
         <span className={cn('mt-1 flex justify-end', styles.sub)}>
           <Tag tag={tag} />

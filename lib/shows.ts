@@ -87,6 +87,7 @@ export type Show = {
   venueFee: number | null
   merch: boolean
   eventPlanner: boolean
+  merchandised: boolean
   revenueType: RevenueType
   flatFee: number | null
   portalEventId: string
@@ -190,6 +191,7 @@ export function validateShowInput(raw: unknown): ShowInput {
     venueFee: cleanNumber(r.venueFee),
     merch: r.merch === true,
     eventPlanner: r.eventPlanner === true,
+    merchandised: r.merchandised === true,
     revenueType,
     flatFee,
     portalEventId: cleanText(r.portalEventId, 120),

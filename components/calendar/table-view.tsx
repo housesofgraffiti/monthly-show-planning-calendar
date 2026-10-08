@@ -162,6 +162,7 @@ const COLUMNS: Column[] = [
     csv: (r) => r.show.venueFee ?? '',
   },
   { id: 'merch', label: 'Merch', cell: (r) => (r.show.merch ? 'Yes' : '—'), csv: (r) => yesNo(r.show.merch) },
+  { id: 'merchandised', label: 'Merchandised', core: true, cell: (r) => (r.show.merchandised ? 'Yes' : 'No'), csv: (r) => yesNo(r.show.merchandised) },
   {
     id: 'eventPlanner',
     label: 'Event Planner',

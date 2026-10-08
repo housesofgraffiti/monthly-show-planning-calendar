@@ -33,6 +33,8 @@ const EVENT_PLANNER_HINT =
   'Event planner needs a new database column. Run scripts/004_add_event_planner.sql in Supabase, then try again.'
 const ADJUSTMENT_HINT =
   'Your estimate needs new database columns. Run scripts/005_add_projection_adjustments.sql in Supabase, then try again.'
+const MERCHANDISED_HINT =
+  'Merchandised needs a new database column. Run scripts/007_add_merchandised.sql in Supabase, then try again.'
 
 const SENDS_HINT =
   'Marketing sends need a new database table. Run scripts/006_add_marketing_sends.sql in Supabase, then try again.'
@@ -61,6 +63,7 @@ type ShowRow = {
   venue_fee: number | string | null
   merch: boolean | null
   event_planner: boolean | null
+  merchandised: boolean | null
   revenue_type: Show['revenueType'] | null
   flat_fee: number | string | null
   portal_event_id: string | null
@@ -76,7 +79,8 @@ const BASE_SHOW_COLUMNS =
 const REGION_SHOW_COLUMNS = `${BASE_SHOW_COLUMNS}, region, organized_by`
 const REVENUE_SHOW_COLUMNS = `${REGION_SHOW_COLUMNS}, venue_fee, merch, revenue_type, flat_fee`
 const EVENT_PLANNER_SHOW_COLUMNS = `${REVENUE_SHOW_COLUMNS}, event_planner`
-const SHOW_COLUMNS = `${EVENT_PLANNER_SHOW_COLUMNS}, adjusted_total, adjustment_reason, adjustment_note, model_total_at_adjustment`
+const MERCHANDISED_SHOW_COLUMNS = `${EVENT_PLANNER_SHOW_COLUMNS}, merchandised`
+const SHOW_COLUMNS = `${MERCHANDISED_SHOW_COLUMNS}, adjusted_total, adjustment_reason, adjustment_note, model_total_at_adjustment`
 
 const toNum = (v: number | string | null) => (v == null ? null : Number(v))
 
@@ -85,21 +89,26 @@ const toNum = (v: number | string | null) => (v == null ? null : Number(v))
 type ColumnTier = { columns: string; omit: string[] }
 const REVENUE_COLUMNS = ['venue_fee', 'merch', 'revenue_type', 'flat_fee']
 const ADJUSTMENT_COLUMNS = ['adjusted_total', 'adjustment_reason', 'adjustment_note', 'model_total_at_adjustment']
+const MERCHANDISED_COLUMNS = ['merchandised']
 const COLUMN_TIERS: ColumnTier[] = [
   { columns: SHOW_COLUMNS, omit: [] },
-  { columns: EVENT_PLANNER_SHOW_COLUMNS, omit: ADJUSTMENT_COLUMNS },
-  { columns: REVENUE_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, 'event_planner'] },
-  { columns: REGION_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, ...REVENUE_COLUMNS, 'event_planner'] },
+  { columns: MERCHANDISED_SHOW_COLUMNS, omit: ADJUSTMENT_COLUMNS },
+  { columns: EVENT_PLANNER_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS] },
+  { columns: REVENUE_SHOW_COLUMNS, omit: [...ADJUSTMENT_COLUMNS, MERCHANDISED_COLUMNS[0], 'event_planner'] },
+  {
+    columns: REGION_SHOW_COLUMNS,
+    omit: [...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS, ...REVENUE_COLUMNS, 'event_planner'],
+  },
   {
     columns: BASE_SHOW_COLUMNS,
-    omit: [...ADJUSTMENT_COLUMNS, ...REVENUE_COLUMNS, 'event_planner', 'region', 'organized_by'],
+    omit: [...ADJUSTMENT_COLUMNS, ...MERCHANDISED_COLUMNS, ...REVENUE_COLUMNS, 'event_planner', 'region', 'organized_by'],
   },
 ]
 
 function isMissingColumns(error: PgError | null) {
   if (!error) return false
   if (error.code === '42703' || error.code === 'PGRST204') return true
-  return /region|organized_by|venue_fee|merch|event_planner|revenue_type|flat_fee|adjusted_total|adjustment_|model_total/.test(
+  return /region|organized_by|venue_fee|merchandised|merch|event_planner|revenue_type|flat_fee|adjusted_total|adjustment_|model_total/.test(
     error.message,
   )
 }
@@ -169,6 +178,7 @@ function fromRow(row: ShowRow): Show {
     venueFee: toNum(row.venue_fee),
     merch: row.merch === true,
     eventPlanner: row.event_planner === true,
+    merchandised: row.merchandised === true,
     revenueType: row.revenue_type ?? 'Ticketed',
     flatFee: toNum(row.flat_fee),
     portalEventId: row.portal_event_id ?? '',
@@ -840,6 +850,7 @@ export async function saveShow(raw: unknown): Promise<Show> {
     venue_fee: input.venueFee,
     merch: input.merch,
     event_planner: input.eventPlanner,
+    merchandised: input.merchandised,
     revenue_type: input.revenueType,
     flat_fee: input.flatFee,
     portal_event_id: input.portalEventId || null,
@@ -879,16 +890,20 @@ export async function saveShow(raw: unknown): Promise<Show> {
   const usesRevenueFields = input.revenueType === 'Flat fee' || input.merch || input.venueFee != null
   const usesEventPlanner = input.eventPlanner
   const usesAdjustment = input.adjustedTotal != null
+  const usesMerchandised = input.merchandised
   const tiers = usesAdjustment
     ? COLUMN_TIERS.slice(0, 1)
-    : usesEventPlanner
+    : usesMerchandised
       ? COLUMN_TIERS.slice(0, 2)
-      : usesRevenueFields
+      : usesEventPlanner
         ? COLUMN_TIERS.slice(0, 3)
-        : COLUMN_TIERS
+        : usesRevenueFields
+          ? COLUMN_TIERS.slice(0, 4)
+          : COLUMN_TIERS
   const { data, error } = await runTiers((tier) => runSave(omitKeys(row, tier.omit), tier.columns), tiers)
   if (error) {
     if (usesAdjustment && isMissingColumns(error)) throw new Error(ADJUSTMENT_HINT)
+    if (usesMerchandised && isMissingColumns(error)) throw new Error(MERCHANDISED_HINT)
     if (usesEventPlanner && isMissingColumns(error)) throw new Error(EVENT_PLANNER_HINT)
     if (usesRevenueFields && isMissingColumns(error)) throw new Error(NEW_FIELDS_HINT)
     throw new Error(error.message)
