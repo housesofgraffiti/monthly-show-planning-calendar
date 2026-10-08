@@ -75,6 +75,7 @@ export type Show = {
   organizedBy: Organizer
   venueFee: number | null
   merch: boolean
+  eventPlanner: boolean
   revenueType: RevenueType
   flatFee: number | null
   portalEventId: string
@@ -165,6 +166,7 @@ export function validateShowInput(raw: unknown): ShowInput {
     projectedRevenue: cleanNumber(r.projectedRevenue),
     venueFee: cleanNumber(r.venueFee),
     merch: r.merch === true,
+    eventPlanner: r.eventPlanner === true,
     revenueType,
     flatFee,
     portalEventId: cleanText(r.portalEventId, 120),

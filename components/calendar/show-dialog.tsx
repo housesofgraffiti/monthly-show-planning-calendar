@@ -26,9 +26,11 @@ import {
 } from '@/lib/shows'
 import {
   capitalize,
+  compCount,
   CONFIDENCE_NOTES,
+  confirmedTotal,
+  projectedTotal,
   rangeLabel,
-  soldLabel,
   timeAgo,
   type PortalMatch,
   type PortalSuggestion,
@@ -115,20 +117,27 @@ function PortalSummary({ match }: { match: PortalMatch }) {
   const range = p ? rangeLabel(p) : null
   const rows: [string, React.ReactNode][] = []
   if (match.hasEvent) {
-    rows.push(['Sold', soldLabel(match).replace(' sold', '')])
+    const total = confirmedTotal(match) ?? 0
+    const comps = compCount(match)
+    const paid = Math.max(0, total - comps)
+    const capacity = match.ticketsAvailable != null ? ` of ${match.ticketsAvailable}` : ''
+    rows.push(['Tickets', `${total} confirmed (${paid} paid, ${comps} comp)${capacity}`])
+    if (match.vips) rows.push(['VIPs', String(match.vips)])
     if (match.revenue != null) rows.push(['Actual revenue', formatCurrency(match.revenue)])
   }
-  if (p && (p.tickets != null || p.revenue != null)) {
-    const tickets =
-      p.tickets != null
-        ? `${Math.round(p.tickets)} ${Math.round(p.tickets) === 1 ? 'ticket' : 'tickets'}${range ? ` (${range})` : ''}`
-        : null
-    const revenueRange =
-      p.revenueLow != null && p.revenueHigh != null
-        ? ` (${formatCurrency(p.revenueLow)} to ${formatCurrency(p.revenueHigh)})`
-        : ''
-    const revenue = p.revenue != null ? `${formatCurrency(p.revenue)}${revenueRange}` : null
-    rows.push(['Projection', [tickets, revenue].filter(Boolean).join(' · ')])
+  if (p) {
+    const total = projectedTotal(p)
+    if (total != null) {
+      const paidNote = p.tickets != null ? ` · paid ~${Math.round(p.tickets)}` : ''
+      rows.push(['Projection', `~${Math.round(total)} total${range ? ` (${range})` : ''}${paidNote}`])
+    }
+    if (p.revenue != null) {
+      const revenueRange =
+        p.revenueLow != null && p.revenueHigh != null
+          ? ` (${formatCurrency(p.revenueLow)} to ${formatCurrency(p.revenueHigh)})`
+          : ''
+      rows.push(['Proj. revenue', `${formatCurrency(p.revenue)}${revenueRange}`])
+    }
   }
   if (p?.confidence) {
     rows.push([
@@ -190,6 +199,7 @@ export function ShowDialog({
   const [flatFee, setFlatFee] = useState(numStr(show?.flatFee))
   const [venueFee, setVenueFee] = useState(numStr(show?.venueFee))
   const [merch, setMerch] = useState(show?.merch ?? false)
+  const [eventPlanner, setEventPlanner] = useState(show?.eventPlanner ?? false)
   const [area, setArea] = useState(show?.area ?? '')
   const [venue, setVenue] = useState(show?.venue ?? '')
   const [tickets, setTickets] = useState(numStr(show?.tickets))
@@ -261,6 +271,7 @@ export function ShowDialog({
         flatFee: flatFee === '' ? null : Number(flatFee),
         venueFee: venueFee === '' ? null : Number(venueFee),
         merch,
+        eventPlanner,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save this show.')
@@ -430,15 +441,26 @@ export function ShowDialog({
           </Field>
           )}
 
-          <label className="flex items-center gap-3 text-[15px] text-neutral-700">
-            <input
-              type="checkbox"
-              checked={merch}
-              onChange={(e) => setMerch(e.target.checked)}
-              className="size-5 rounded border-neutral-300 accent-neutral-900"
-            />
-            Merch table at this show
-          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-8">
+            <label className="flex items-center gap-3 text-[15px] text-neutral-700">
+              <input
+                type="checkbox"
+                checked={merch}
+                onChange={(e) => setMerch(e.target.checked)}
+                className="size-5 rounded border-neutral-300 accent-neutral-900"
+              />
+              Merch table at this show
+            </label>
+            <label className="flex items-center gap-3 text-[15px] text-neutral-700">
+              <input
+                type="checkbox"
+                checked={eventPlanner}
+                onChange={(e) => setEventPlanner(e.target.checked)}
+                className="size-5 rounded border-neutral-300 accent-neutral-900"
+              />
+              Event planner
+            </label>
+          </div>
 
           <Field label="Portal event ID" htmlFor={f('portal')} optional>
             <input id={f('portal')} value={portalEventId} onChange={(e) => setPortalEventId(e.target.value)} maxLength={120} className={inputCls} />

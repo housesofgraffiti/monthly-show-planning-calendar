@@ -28,6 +28,8 @@ import { validateMarkerInput, type DayMarker } from '@/lib/markers'
 
 const NEW_FIELDS_HINT =
   'This needs the new database columns/tables. Run scripts/003_add_revenue_and_markers.sql in Supabase, then try again.'
+const EVENT_PLANNER_HINT =
+  'Event planner needs a new database column. Run scripts/004_add_event_planner.sql in Supabase, then try again.'
 
 type PgError = { code?: string; message: string }
 type PgResult = { data: unknown; error: PgError | null }
@@ -52,6 +54,7 @@ type ShowRow = {
   organized_by: Show['organizedBy']
   venue_fee: number | string | null
   merch: boolean | null
+  event_planner: boolean | null
   revenue_type: Show['revenueType'] | null
   flat_fee: number | string | null
   portal_event_id: string | null
@@ -61,24 +64,26 @@ type ShowRow = {
 const BASE_SHOW_COLUMNS =
   'id, show_date, category, format, area, venue, tickets, ticket_price, projected_revenue, status, portal_event_id, notes'
 const REGION_SHOW_COLUMNS = `${BASE_SHOW_COLUMNS}, region, organized_by`
-const SHOW_COLUMNS = `${REGION_SHOW_COLUMNS}, venue_fee, merch, revenue_type, flat_fee`
+const REVENUE_SHOW_COLUMNS = `${REGION_SHOW_COLUMNS}, venue_fee, merch, revenue_type, flat_fee`
+const SHOW_COLUMNS = `${REVENUE_SHOW_COLUMNS}, event_planner`
 
 const toNum = (v: number | string | null) => (v == null ? null : Number(v))
 
-// Newer columns come from scripts/002 and scripts/003. Until those migrations run, retry with
+// Newer columns come from scripts/002, 003 and 004. Until those migrations run, retry with
 // the older column sets so the app keeps working and just defaults the missing fields.
 type ColumnTier = { columns: string; omit: string[] }
 const REVENUE_COLUMNS = ['venue_fee', 'merch', 'revenue_type', 'flat_fee']
 const COLUMN_TIERS: ColumnTier[] = [
   { columns: SHOW_COLUMNS, omit: [] },
-  { columns: REGION_SHOW_COLUMNS, omit: REVENUE_COLUMNS },
-  { columns: BASE_SHOW_COLUMNS, omit: [...REVENUE_COLUMNS, 'region', 'organized_by'] },
+  { columns: REVENUE_SHOW_COLUMNS, omit: ['event_planner'] },
+  { columns: REGION_SHOW_COLUMNS, omit: [...REVENUE_COLUMNS, 'event_planner'] },
+  { columns: BASE_SHOW_COLUMNS, omit: [...REVENUE_COLUMNS, 'event_planner', 'region', 'organized_by'] },
 ]
 
 function isMissingColumns(error: PgError | null) {
   if (!error) return false
   if (error.code === '42703' || error.code === 'PGRST204') return true
-  return /region|organized_by|venue_fee|merch|revenue_type|flat_fee/.test(error.message)
+  return /region|organized_by|venue_fee|merch|event_planner|revenue_type|flat_fee/.test(error.message)
 }
 
 async function runTiers(
@@ -122,6 +127,7 @@ function fromRow(row: ShowRow): Show {
     organizedBy: row.organized_by ?? 'Sofar',
     venueFee: toNum(row.venue_fee),
     merch: row.merch === true,
+    eventPlanner: row.event_planner === true,
     revenueType: row.revenue_type ?? 'Ticketed',
     flatFee: toNum(row.flat_fee),
     portalEventId: row.portal_event_id ?? '',
@@ -327,6 +333,9 @@ type PortalEventRow = {
   event_id: string
   tickets_available: number | string | null
   confirmed: number | string | null
+  comp_tickets?: number | string | null
+  total_tickets?: number | string | null
+  vips: number | string | null
   revenue_cents: number | string | null
   synced_at: string | null
 }
@@ -336,6 +345,9 @@ type ProjectionRow = {
   projected_tickets: number | string | null
   low: number | string | null
   high: number | string | null
+  projected_total?: number | string | null
+  total_low?: number | string | null
+  total_high?: number | string | null
   projected_revenue_cents: number | string | null
   revenue_low_cents: number | string | null
   revenue_high_cents: number | string | null
@@ -355,23 +367,46 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
   if (eventIds.length === 0) return portal
   const supabase = getSupabaseAdmin()
 
-  const [eventsRes, projectionsRes] = await Promise.all([
+  // The total-ticket columns are read first; if they are not in the database yet, retry without
+  // them so everything falls back to the paid columns.
+  const readEvents = (columns: string) =>
     supabase
       .from('portal_events')
-      .select('event_id, tickets_available, confirmed, revenue_cents, synced_at')
+      .select(columns)
       .in('event_id', eventIds)
-      .order('synced_at', { ascending: false, nullsFirst: false }),
+      .order('synced_at', { ascending: false, nullsFirst: false }) as PromiseLike<PgResult>
+  const readProjections = (columns: string) =>
     supabase
       .from('projections')
-      .select(
-        'event_id, projected_tickets, low, high, projected_revenue_cents, revenue_low_cents, revenue_high_cents, confidence, confidence_tier, sellout_likely, pace_label, computed_at',
-      )
+      .select(columns)
       .in('event_id', eventIds)
-      .order('computed_at', { ascending: false, nullsFirst: false }),
+      .order('computed_at', { ascending: false, nullsFirst: false }) as PromiseLike<PgResult>
+
+  const EVENT_BASE = 'event_id, tickets_available, confirmed, vips, revenue_cents, synced_at'
+  const PROJECTION_BASE =
+    'event_id, projected_tickets, low, high, projected_revenue_cents, revenue_low_cents, revenue_high_cents, confidence, confidence_tier, sellout_likely, pace_label, computed_at'
+
+  const [eventsRes, projectionsRes] = await Promise.all([
+    readEvents(`${EVENT_BASE}, comp_tickets, total_tickets`).then((res) =>
+      isMissingColumns(res.error) ? readEvents(EVENT_BASE) : res,
+    ),
+    readProjections(`${PROJECTION_BASE}, projected_total, total_low, total_high`).then((res) =>
+      isMissingColumns(res.error) ? readProjections(PROJECTION_BASE) : res,
+    ),
   ])
 
   const entry = (id: string): PortalMatch =>
-    (portal[id] ??= { eventId: id, hasEvent: false, confirmed: null, ticketsAvailable: null, revenue: null, projection: null })
+    (portal[id] ??= {
+      eventId: id,
+      hasEvent: false,
+      confirmed: null,
+      compTickets: null,
+      totalTickets: null,
+      vips: null,
+      ticketsAvailable: null,
+      revenue: null,
+      projection: null,
+    })
 
   if (eventsRes.error) console.error('Could not read portal_events:', eventsRes.error.message)
   for (const row of (eventsRes.data ?? []) as PortalEventRow[]) {
@@ -379,6 +414,9 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
     if (match.hasEvent) continue
     match.hasEvent = true
     match.confirmed = toNum(row.confirmed)
+    match.compTickets = toNum(row.comp_tickets ?? null)
+    match.totalTickets = toNum(row.total_tickets ?? null)
+    match.vips = toNum(row.vips)
     match.ticketsAvailable = toNum(row.tickets_available)
     match.revenue = centsToDollars(row.revenue_cents)
   }
@@ -391,6 +429,9 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
       tickets: toNum(row.projected_tickets),
       low: toNum(row.low),
       high: toNum(row.high),
+      totalTickets: toNum(row.projected_total ?? null),
+      totalLow: toNum(row.total_low ?? null),
+      totalHigh: toNum(row.total_high ?? null),
       revenue: centsToDollars(row.projected_revenue_cents),
       revenueLow: centsToDollars(row.revenue_low_cents),
       revenueHigh: centsToDollars(row.revenue_high_cents),
@@ -635,6 +676,7 @@ export async function saveShow(raw: unknown): Promise<Show> {
     organized_by: input.organizedBy,
     venue_fee: input.venueFee,
     merch: input.merch,
+    event_planner: input.eventPlanner,
     revenue_type: input.revenueType,
     flat_fee: input.flatFee,
     portal_event_id: input.portalEventId || null,
@@ -649,12 +691,15 @@ export async function saveShow(raw: unknown): Promise<Show> {
   }
 
   // Don't silently drop real revenue-field values if the migration hasn't run yet.
-  const usesNewFields = input.revenueType === 'Flat fee' || input.merch || input.venueFee != null
-  const { data, error } = await runTiers(
-    (tier) => runSave(omitKeys(row, tier.omit), tier.columns),
-    usesNewFields ? COLUMN_TIERS.slice(0, 1) : COLUMN_TIERS,
-  )
-  if (error) throw usesNewFields && isMissingColumns(error) ? new Error(NEW_FIELDS_HINT) : new Error(error.message)
+  const usesRevenueFields = input.revenueType === 'Flat fee' || input.merch || input.venueFee != null
+  const usesEventPlanner = input.eventPlanner
+  const tiers = usesEventPlanner ? COLUMN_TIERS.slice(0, 1) : usesRevenueFields ? COLUMN_TIERS.slice(0, 2) : COLUMN_TIERS
+  const { data, error } = await runTiers((tier) => runSave(omitKeys(row, tier.omit), tier.columns), tiers)
+  if (error) {
+    if (usesEventPlanner && isMissingColumns(error)) throw new Error(EVENT_PLANNER_HINT)
+    if (usesRevenueFields && isMissingColumns(error)) throw new Error(NEW_FIELDS_HINT)
+    throw new Error(error.message)
+  }
   return fromRow(data as unknown as ShowRow)
 }
 
