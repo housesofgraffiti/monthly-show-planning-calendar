@@ -59,6 +59,7 @@ export type ImportCandidate = {
   ticketsAvailable: number | null
   projectedRevenue: number | null
   organizedBy: Organizer
+  region: 'LA' | 'Long Beach' | 'Orange County'
   existing: { id: string; format: string; venue: string } | null
 }
 

@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Mail, Plus } from 'lucide-react'
 import { monthTitle } from '@/lib/dates'
-import { CATEGORIES, statusLabel } from '@/lib/shows'
+import { CATEGORIES, REGIONS, statusLabel, type Region } from '@/lib/shows'
 import { isStale, timeAgo } from '@/lib/portal'
 import type { Viewer } from '@/lib/use-calendar-realtime'
 import { CATEGORY_STYLES } from './category-styles'
@@ -18,6 +18,8 @@ type HeaderProps = {
   view: View
   onViewChange: (view: View) => void
   viewers?: Viewer[]
+  region: Region | 'All'
+  onRegionChange: (region: Region | 'All') => void
 }
 
 const outlineBtn =
@@ -33,6 +35,8 @@ export function CalendarHeader({
   view,
   onViewChange,
   viewers = [],
+  region,
+  onRegionChange,
 }: HeaderProps) {
   const { month, year } = monthTitle(ym)
   return (
@@ -63,6 +67,21 @@ export function CalendarHeader({
               }`}
             >
               {v}
+            </button>
+          ))}
+        </div>
+        <div role="group" aria-label="Region filter" className="flex rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium">
+          {(['All', ...REGIONS] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onRegionChange(value)}
+              aria-pressed={region === value}
+              className={`rounded-[0.6rem] px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 ${
+                region === value ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              {value}
             </button>
           ))}
         </div>

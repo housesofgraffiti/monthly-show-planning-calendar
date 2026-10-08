@@ -4,12 +4,12 @@ import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { addMonths } from '@/lib/dates'
 import { createLocalSource, remoteSource, resetLocalData, type DataMode } from '@/lib/data-source'
-import type { OtherRevenueInput, SaveShowResult, Show, ShowInput } from '@/lib/shows'
+import { formatCurrency, type OtherRevenueInput, type Region, type SaveShowResult, type Show, type ShowInput } from '@/lib/shows'
 import { useCalendarRealtime } from '@/lib/use-calendar-realtime'
 import type { DayMarkerInput } from '@/lib/markers'
 import { decideByFor, decisionsThisWeek, featuredInNames, type Send, type SendInput } from '@/lib/sends'
 import { portalFor, type ImportResult } from '@/lib/portal'
-import { typicalDiscovery, type MixKey } from '@/lib/planning'
+import { planningSummary, typicalDiscovery, type MixKey } from '@/lib/planning'
 import { CalendarHeader, Legend } from './calendar-header'
 import { DecisionsThisWeek } from './decisions-this-week'
 import { ImportPanel } from './import-panel'
@@ -29,6 +29,11 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const thisMonth = todayISO.slice(0, 7)
   const [ym, setYm] = useState(thisMonth)
   const [view, setView] = useState<View>('calendar')
+  const [region, setRegion] = useState<Region | 'All'>(() => {
+    if (typeof window === 'undefined') return 'All'
+    const saved = window.localStorage.getItem('calendar-region')
+    return saved === 'LA' || saved === 'Long Beach' || saved === 'Orange County' ? saved : 'All'
+  })
   const [highlight, setHighlight] = useState<MixKey | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [importing, setImporting] = useState(false)
@@ -73,8 +78,14 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const target = data?.target ?? null
   const otherRevenue = data?.otherRevenue ?? []
   const portal = data?.portal
+  const visibleShows = region === 'All' ? shows : shows.filter((show) => show.region === region)
+  const regionalSummary = region === 'All' ? null : planningSummary({ shows: visibleShows, portal, todayISO, other: 0, target })
   const sends = sendData ?? []
-  const decisions = decisionsThisWeek(shows, sends, todayISO)
+  const decisions = decisionsThisWeek(visibleShows, sends, todayISO)
+  const changeRegion = (next: Region | 'All') => {
+    setRegion(next)
+    window.localStorage.setItem('calendar-region', next)
+  }
 
   const openAdd = (date: string) => setEditor({ date, key: Date.now() })
   const openAddSend = (date: string) => setSendEditor({ date, key: Date.now() })
@@ -185,6 +196,8 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         onAdd={() => openAdd(ym === thisMonth ? todayISO : `${ym}-01`)}
         onImport={mode === 'remote' ? () => setImporting(true) : undefined}
         view={view}
+        region={region}
+        onRegionChange={changeRegion}
         viewers={viewers}
         onViewChange={(next) => {
           setView(next)
@@ -195,6 +208,8 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
       <SummaryBar
         ym={ym}
         shows={shows}
+        mixShows={visibleShows}
+        regionLabel={regionalSummary ? `${region}: ${formatCurrency(regionalSummary.lockedIn)} locked in, ${formatCurrency(regionalSummary.projectedRemaining)} projected (${visibleShows.length} shows)` : undefined}
         target={target}
         otherRevenue={otherRevenue}
         portal={portal}
@@ -228,7 +243,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
           <MonthGrid
             ym={ym}
             todayISO={todayISO}
-            shows={shows}
+            shows={visibleShows}
             portal={portal}
             markers={markers ?? []}
             sends={sends}
@@ -240,7 +255,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
             onOpenSend={openSend}
           />
         ) : (
-          <TableView ym={ym} todayISO={todayISO} shows={shows} portal={portal} sends={sends} onOpen={openEdit} />
+          <TableView ym={ym} todayISO={todayISO} shows={visibleShows} portal={portal} sends={sends} onOpen={openEdit} />
         )}
       </div>
 

@@ -13,6 +13,8 @@ import { ProgressToTarget } from './progress-to-target'
 type Props = {
   ym: string
   shows: Show[]
+  mixShows?: Show[]
+  regionLabel?: string
   target: number | null
   otherRevenue: OtherRevenueLine[]
   portal?: PortalMap
@@ -114,6 +116,8 @@ function TargetEditor({ target, onSave }: { target: number | null; onSave: (v: n
 export function SummaryBar({
   ym,
   shows,
+  mixShows = shows,
+  regionLabel,
   target,
   otherRevenue,
   portal,
@@ -132,7 +136,8 @@ export function SummaryBar({
   return (
     <div className="flex flex-col gap-4">
       <ProgressToTarget summary={s} typical={typical} />
-      <MixStrip shows={shows} highlight={highlight} onHighlight={onHighlight} />
+      <MixStrip shows={mixShows} highlight={highlight} onHighlight={onHighlight} />
+  {regionLabel && <p className="px-1 text-sm text-neutral-500">{regionLabel}</p>}
 
       <section aria-label="Monthly summary" className="flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 lg:grid-cols-4">

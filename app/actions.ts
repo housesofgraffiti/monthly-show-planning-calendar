@@ -677,6 +677,7 @@ type ImportEventRow = {
   tickets_available: number | string | null
   organized_as: string | null
   revenue_cents: number | string | null
+  region: string | null
 }
 
 type UnlinkedShowRow = {
@@ -694,7 +695,7 @@ async function findImportCandidates(ym: string): Promise<ImportCandidate[]> {
 
   const eventsRes = await supabase
     .from('portal_events')
-    .select('event_id, show_date, venue, tickets_available, organized_as, revenue_cents')
+    .select('event_id, show_date, venue, tickets_available, organized_as, revenue_cents, region')
     .eq('status', 'published')
     .gte('show_date', start)
     .lt('show_date', end)
@@ -762,6 +763,7 @@ async function findImportCandidates(ym: string): Promise<ImportCandidate[]> {
       ticketsAvailable: toNum(event.tickets_available),
       projectedRevenue: cents == null ? null : cents / 100,
       organizedBy: /producer/i.test(event.organized_as ?? '') ? 'Local Producer' : 'Sofar',
+      region: event.region === 'Long Beach' || event.region === 'Orange County' ? event.region : 'LA',
       existing: match ? { id: match.id, format: match.format, venue: match.venue ?? '' } : null,
     })
   }
@@ -824,7 +826,7 @@ export async function importFromPortal(ym: string, raw: unknown): Promise<Import
       tickets: c.ticketsAvailable,
       projected_revenue: c.projectedRevenue,
       status: 'Confirmed',
-      region: 'LA',
+      region: c.region,
       organized_by: c.organizedBy,
       portal_event_id: c.eventId,
       notes: 'Imported from portal. Check format and price.',
