@@ -336,6 +336,8 @@ type PortalEventRow = {
   comp_tickets?: number | string | null
   total_tickets?: number | string | null
   vips: number | string | null
+  ticket_prices?: string | null
+  ticket_mix?: string | null
   revenue_cents: number | string | null
   synced_at: string | null
 }
@@ -387,9 +389,11 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
     'event_id, projected_tickets, low, high, projected_revenue_cents, revenue_low_cents, revenue_high_cents, confidence, confidence_tier, sellout_likely, pace_label, computed_at'
 
   const [eventsRes, projectionsRes] = await Promise.all([
-    readEvents(`${EVENT_BASE}, comp_tickets, total_tickets`).then((res) =>
-      isMissingColumns(res.error) ? readEvents(EVENT_BASE) : res,
-    ),
+    readEvents(`${EVENT_BASE}, comp_tickets, total_tickets, ticket_prices, ticket_mix`)
+      .then((res) =>
+        isMissingColumns(res.error) ? readEvents(`${EVENT_BASE}, comp_tickets, total_tickets`) : res,
+      )
+      .then((res) => (isMissingColumns(res.error) ? readEvents(EVENT_BASE) : res)),
     readProjections(`${PROJECTION_BASE}, projected_total, total_low, total_high`).then((res) =>
       isMissingColumns(res.error) ? readProjections(PROJECTION_BASE) : res,
     ),
@@ -403,6 +407,8 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
       compTickets: null,
       totalTickets: null,
       vips: null,
+      ticketPrices: null,
+      ticketMix: null,
       ticketsAvailable: null,
       revenue: null,
       projection: null,
@@ -417,6 +423,8 @@ async function readPortalMatches(eventIds: string[]): Promise<PortalMap> {
     match.compTickets = toNum(row.comp_tickets ?? null)
     match.totalTickets = toNum(row.total_tickets ?? null)
     match.vips = toNum(row.vips)
+    match.ticketPrices = row.ticket_prices?.trim() || null
+    match.ticketMix = row.ticket_mix?.trim() || null
     match.ticketsAvailable = toNum(row.tickets_available)
     match.revenue = centsToDollars(row.revenue_cents)
   }

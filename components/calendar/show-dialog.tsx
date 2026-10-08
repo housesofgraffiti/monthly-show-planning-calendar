@@ -122,6 +122,8 @@ function PortalSummary({ match }: { match: PortalMatch }) {
     const paid = Math.max(0, total - comps)
     const capacity = match.ticketsAvailable != null ? ` of ${match.ticketsAvailable}` : ''
     rows.push(['Tickets', `${total} confirmed (${paid} paid, ${comps} comp)${capacity}`])
+    if (match.ticketPrices) rows.push(['Prices', match.ticketPrices])
+    if (match.ticketMix) rows.push(['Mix', match.ticketMix])
     if (match.vips) rows.push(['VIPs', String(match.vips)])
     if (match.revenue != null) rows.push(['Actual revenue', formatCurrency(match.revenue)])
   }

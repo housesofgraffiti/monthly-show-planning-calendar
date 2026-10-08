@@ -40,6 +40,9 @@ export type PortalMatch = {
   // Paid plus comp, as shown in the portal.
   totalTickets: number | null
   vips: number | null
+  // Preformatted by the portal, e.g. "General Admission $28 · Soundbath + Show $38".
+  ticketPrices: string | null
+  ticketMix: string | null
   ticketsAvailable: number | null
   revenue: number | null
   projection: PortalProjection | null
