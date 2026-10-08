@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatLongDate, formatShortWeekday } from '@/lib/dates'
+import { formatLongDate, formatShortWeekday, formatWeekLabel, weekStartISO } from '@/lib/dates'
 import { formatCurrency, statusLabel, type Show } from '@/lib/shows'
 import {
   capitalize,
@@ -391,6 +391,14 @@ export function TableView({ ym, todayISO, shows, portal, sends, onOpen }: Props)
     revenue: active.reduce((sum, r) => sum + r.revenue, 0),
   }
 
+  const weeks: { start: string; rows: Row[] }[] = []
+  for (const row of rows) {
+    const start = weekStartISO(row.show.date)
+    const last = weeks[weeks.length - 1]
+    if (last?.start === start) last.rows.push(row)
+    else weeks.push({ start, rows: [row] })
+  }
+
   const visible = COLUMNS.filter((col) => !col.csvOnly && (showAll || col.core))
   const firstTotal = visible.findIndex((col) => col.foot)
   const labelSpan = firstTotal === -1 ? visible.length : firstTotal
@@ -437,24 +445,37 @@ export function TableView({ ym, todayISO, shows, portal, sends, onOpen }: Props)
                 </td>
               </tr>
             )}
-            {rows.map((row) => (
-              <tr
-                key={row.show.id}
-                onClick={() => onOpen(row.show)}
-                className={cn(
-                  'cursor-pointer transition-colors hover:bg-neutral-50',
-                  row.cancelled && 'text-neutral-400',
-                )}
-              >
-                {visible.map((col) => (
+            {weeks.map((week, weekIndex) => (
+              <Fragment key={week.start}>
+                <tr className="border-t border-neutral-300/70 bg-neutral-100/70">
                   <td
-                    key={col.id}
-                    className={cn(td, col.right && numeric, row.cancelled && 'line-through', col.cellClass?.(row))}
+                    colSpan={visible.length}
+                    className="px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-neutral-400"
                   >
-                    {col.cell?.(row)}
+                    {formatWeekLabel(week.start)}
                   </td>
+                </tr>
+                {week.rows.map((row) => (
+                  <tr
+                    key={row.show.id}
+                    onClick={() => onOpen(row.show)}
+                    className={cn(
+                      'cursor-pointer transition-colors hover:bg-neutral-100/60',
+                      weekIndex % 2 === 1 && 'bg-neutral-50/70',
+                      row.cancelled && 'text-neutral-400',
+                    )}
+                  >
+                    {visible.map((col) => (
+                      <td
+                        key={col.id}
+                        className={cn(td, col.right && numeric, row.cancelled && 'line-through', col.cellClass?.(row))}
+                      >
+                        {col.cell?.(row)}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
+              </Fragment>
             ))}
           </tbody>
           {rows.length > 0 && (

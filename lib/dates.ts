@@ -52,6 +52,20 @@ export function buildMonthGrid(ym: string): GridDay[] {
   })
 }
 
+export function weekStartISO(iso: string) {
+  const weekday = (new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7
+  return addDays(iso, -weekday)
+}
+
+export function formatWeekLabel(iso: string) {
+  const label = new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+  return `Week of ${label}`
+}
+
 export function formatLongDate(iso: string) {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', {
     weekday: 'long',

@@ -4,9 +4,10 @@ import { CATEGORIES, REGIONS, statusLabel, type Region } from '@/lib/shows'
 import { isStale, timeAgo } from '@/lib/portal'
 import type { Viewer } from '@/lib/use-calendar-realtime'
 import { CATEGORY_STYLES } from './category-styles'
+import { HelpMenu } from './help-menu'
 import { PresenceBubbles } from './presence-bubbles'
 
-type View = 'calendar' | 'table'
+type View = 'calendar' | 'table' | 'venues'
 
 type HeaderProps = {
   ym: string
@@ -20,6 +21,8 @@ type HeaderProps = {
   viewers?: Viewer[]
   region: Region | 'All'
   onRegionChange: (region: Region | 'All') => void
+  onTour: () => void
+  onFaq: () => void
 }
 
 const outlineBtn =
@@ -37,11 +40,13 @@ export function CalendarHeader({
   viewers = [],
   region,
   onRegionChange,
+  onTour,
+  onFaq,
 }: HeaderProps) {
   const { month, year } = monthTitle(ym)
   return (
     <header className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-      <div className="flex flex-col gap-2">
+      <div data-tour="header" className="flex flex-col gap-2">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-400">
           Sofar Sounds LA · Show Calendar
         </p>
@@ -49,14 +54,15 @@ export function CalendarHeader({
           {month} <span className="text-neutral-300">{year}</span>
         </h1>
       </div>
-      <div className="flex flex-wrap items-center gap-2.5 sm:flex-nowrap sm:whitespace-nowrap">
+      <div className="flex flex-wrap items-center gap-2.5 whitespace-nowrap xl:flex-nowrap">
         <PresenceBubbles viewers={viewers} />
         <div
           role="group"
           aria-label="Calendar view"
+          data-tour="view-toggle"
           className="flex rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium"
         >
-          {(['calendar', 'table'] as const).map((v) => (
+          {(['calendar', 'table', 'venues'] as const).map((v) => (
             <button
               key={v}
               type="button"
@@ -70,7 +76,7 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
-        <div role="group" aria-label="Region filter" className="flex rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium">
+        <div role="group" aria-label="Region filter" data-tour="region-filter" className="flex rounded-xl border border-neutral-200 bg-white p-0.5 text-sm font-medium">
           {(['All', ...REGIONS] as const).map((value) => (
             <button
               key={value}
@@ -85,35 +91,39 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
-        <button type="button" onClick={onToday} className={`${outlineBtn} rounded-xl px-4`}>
-          Today
-        </button>
-        <div className="flex">
-          <button type="button" onClick={onPrev} aria-label="Previous month" className={`${outlineBtn} w-11 rounded-l-xl`}>
-            <ChevronLeft className="size-4" aria-hidden />
+        <div data-tour="month-nav" className="flex items-center gap-2.5">
+          <button type="button" onClick={onToday} className={`${outlineBtn} rounded-xl px-4`}>
+            Today
           </button>
-          <button
-            type="button"
-            onClick={onNext}
-            aria-label="Next month"
-            className={`${outlineBtn} -ml-px w-11 rounded-r-xl`}
-          >
-            <ChevronRight className="size-4" aria-hidden />
-          </button>
+          <div className="flex">
+            <button type="button" onClick={onPrev} aria-label="Previous month" className={`${outlineBtn} w-11 rounded-l-xl`}>
+              <ChevronLeft className="size-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={onNext}
+              aria-label="Next month"
+              className={`${outlineBtn} -ml-px w-11 rounded-r-xl`}
+            >
+              <ChevronRight className="size-4" aria-hidden />
+            </button>
+          </div>
         </div>
         {onImport && (
-          <button type="button" onClick={onImport} className={`${outlineBtn} ml-auto rounded-xl px-4 sm:ml-0`}>
+          <button type="button" onClick={onImport} data-tour="import" className={`${outlineBtn} rounded-xl px-4`}>
             Import from portal
           </button>
         )}
         <button
           type="button"
           onClick={onAdd}
-          className="ml-auto inline-flex h-11 items-center gap-1.5 rounded-xl bg-neutral-900 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 sm:ml-0"
+          data-tour="add-show"
+          className="ml-auto inline-flex h-11 items-center gap-1.5 rounded-xl bg-neutral-900 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
         >
           <Plus className="size-4" aria-hidden />
           Add show
         </button>
+        <HelpMenu onTour={onTour} onFaq={onFaq} />
       </div>
     </header>
   )
@@ -181,7 +191,7 @@ export function Legend({
           </li>
         )}
       </ul>
-      <div className="flex items-center gap-3">
+      <div data-tour="sync-status" className="flex items-center gap-3">
         {portalSyncedAt && (
           <p className={stale ? 'font-medium text-amber-600' : 'text-neutral-500'}>
             Portal synced {timeAgo(portalSyncedAt)}

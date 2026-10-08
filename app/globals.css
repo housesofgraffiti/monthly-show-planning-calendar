@@ -153,6 +153,20 @@
   }
 }
 
+.driver-popover-skip-btn {
+  margin-right: auto;
+  border: 0;
+  background: transparent;
+  color: oklch(0.556 0 0);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.driver-popover-skip-btn:hover {
+  color: oklch(0.145 0 0);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

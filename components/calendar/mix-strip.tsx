@@ -13,7 +13,7 @@ export function MixStrip({ shows, highlight, onHighlight }: Props) {
   const counts = mixCounts(shows)
 
   return (
-    <div role="group" aria-label="Show mix. Select one to highlight those shows on the calendar." className="flex flex-wrap items-center gap-2">
+    <div role="group" aria-label="Show mix. Select one to highlight those shows on the calendar." data-tour="mix" className="flex flex-wrap items-center gap-2">
       <span className="mr-1 text-sm text-neutral-500">Mix</span>
       {MIX_KEYS.map((key) => {
         const active = highlight === key
