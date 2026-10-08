@@ -33,16 +33,28 @@ function pickTag(match: PortalMatch | undefined, past: boolean, flat: boolean, l
   return local ? 'LP' : null
 }
 
-function TicketsLine({ match, past, className }: { match: PortalMatch; past: boolean; className: string }) {
+function hasTicketsLine(match: PortalMatch, past: boolean) {
+  if (past) return match.hasEvent
+  return match.hasEvent || projectedTotal(match.projection) != null
+}
+
+function Tag({ tag }: { tag: CardTag }) {
+  return <span className={cn('shrink-0 rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>{tag}</span>
+}
+
+function TicketsLine({ match, past, tag, className }: { match: PortalMatch; past: boolean; tag?: CardTag | null; className: string }) {
+  if (!hasTicketsLine(match, past)) return null
   if (past) {
-    if (!match.hasEvent) return null
-    return <span className={cn('mt-0.5 block text-[11px] leading-snug tabular-nums', className)}>{confirmedLabel(match)}</span>
+    return (
+      <span className={cn('mt-0.5 flex items-center justify-between gap-2 text-[11px] leading-snug tabular-nums', className)}>
+        <span>{confirmedLabel(match)}</span>
+        {tag && <Tag tag={tag} />}
+      </span>
+    )
   }
 
   const projection = match.projection
   const projected = projection ? projectedTotal(projection) : null
-  if (!match.hasEvent && projected == null) return null
-
   const capacity = match.ticketsAvailable
   const percent = capacity ? Math.min(100, Math.round(((confirmedTotal(match) ?? 0) / capacity) * 100)) : null
   const lowConfidence = projection?.confidence === 'low'
@@ -62,6 +74,7 @@ function TicketsLine({ match, past, className }: { match: PortalMatch; past: boo
           </span>
         )}
       </span>
+      {tag && <Tag tag={tag} />}
     </span>
   )
 }
@@ -113,15 +126,8 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
         emphasis === 'off' && 'opacity-30',
       )}
     >
-      <span className="flex items-center justify-between gap-2">
-        <span className={cn('truncate text-sm font-semibold leading-snug', !show.venue && 'font-normal opacity-60')}>
-          {venueName}
-        </span>
-        {tag && (
-          <span className={cn('shrink-0 rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}>
-            {tag}
-          </span>
-        )}
+      <span className={cn('block text-sm font-semibold leading-snug', !show.venue && 'font-normal opacity-60')}>
+        {venueName}
       </span>
       <span className={cn('flex items-center gap-1.5 text-xs leading-snug', styles.sub)}>
         <span className={cn('size-2 shrink-0 rounded-full', styles.dot)} aria-hidden />
@@ -142,7 +148,12 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis }: Props)
           </span>
         )}
       </span>
-      {!flat && !local && match && <TicketsLine match={match} past={past} className={styles.sub} />}
+      {!flat && !local && match && <TicketsLine match={match} past={past} tag={tag} className={styles.sub} />}
+      {(!match || flat || local || !hasTicketsLine(match, past)) && tag && (
+        <span className={cn('mt-1 flex justify-end', styles.sub)}>
+          <Tag tag={tag} />
+        </span>
+      )}
       {money && <MoneyLine money={money} className={styles.sub} />}
     </button>
   )
