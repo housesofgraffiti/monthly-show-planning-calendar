@@ -185,7 +185,6 @@ function EstimateEditor({
           ))}
         </div>
       </div>
-      {value !== '' && reason == null && <p className="text-xs text-red-600">Pick a reason for your estimate.</p>}
       {value !== '' && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`${idPrefix}-note`} className="text-xs font-medium text-neutral-600">Note (optional)</label>
@@ -395,10 +394,6 @@ export function ShowDialog({
     setError(null)
     setConflict(false)
     const estimate = adjustedTotal === '' ? null : Number(adjustedTotal)
-    if (estimate != null && adjustmentReason == null) {
-      setError('Pick a reason for your estimate, or clear the adjustment.')
-      return
-    }
     setPending('save')
     try {
       const result = await onSave({
