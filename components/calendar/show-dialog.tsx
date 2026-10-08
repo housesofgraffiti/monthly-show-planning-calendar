@@ -5,6 +5,7 @@ import { ChevronDown, X } from 'lucide-react'
 import useSWR from 'swr'
 import { cn } from '@/lib/utils'
 import { formatLongDate } from '@/lib/dates'
+import { decideBySource, formatDayShort, type DecideBy } from '@/lib/sends'
 import {
   ADJUSTMENT_REASONS,
   CATEGORIES,
@@ -45,6 +46,8 @@ type Props = {
   show?: Show
   date: string
   match?: PortalMatch
+  decideBy?: DecideBy | null
+  featuredIn?: string[]
   getSuggestions?: (date: string) => Promise<PortalSuggestion[]>
   getMarkers?: (ym: string) => Promise<DayMarker[]>
   onClose: () => void
@@ -267,6 +270,8 @@ export function ShowDialog({
   show,
   date: initialDate,
   match,
+  decideBy,
+  featuredIn = [],
   getSuggestions,
   getMarkers,
   onClose,
@@ -432,6 +437,15 @@ export function ShowDialog({
               {show ? 'Edit show' : 'New show'}
             </h2>
             <p className="text-sm text-neutral-500">{date ? formatLongDate(date) : 'Pick a date'}</p>
+            {decideBy && (
+              <p className="text-sm font-medium text-teal-800">
+                Decide by {formatDayShort(decideBy.date)}{' '}
+                <span className="font-normal text-neutral-500">· {decideBySource(decideBy)}</span>
+              </p>
+            )}
+            {featuredIn.length > 0 && (
+              <p className="text-sm text-neutral-500">Featured in {featuredIn.join(', ')}</p>
+            )}
           </div>
           <button
             type="button"
