@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { addMonths } from '@/lib/dates'
 import { createLocalSource, remoteSource, resetLocalData, type DataMode } from '@/lib/data-source'
-import type { OtherRevenueInput, Show, ShowInput } from '@/lib/shows'
+import type { OtherRevenueInput, SaveShowResult, Show, ShowInput } from '@/lib/shows'
+import { useCalendarRealtime } from '@/lib/use-calendar-realtime'
 import type { DayMarkerInput } from '@/lib/markers'
 import { decideByFor, decisionsThisWeek, featuredInNames, type Send, type SendInput } from '@/lib/sends'
 import { portalFor, type ImportResult } from '@/lib/portal'
@@ -14,6 +15,7 @@ import { DecisionsThisWeek } from './decisions-this-week'
 import { ImportPanel } from './import-panel'
 import { MarkersDialog } from './markers-dialog'
 import { MonthGrid } from './month-grid'
+import { NamePrompt, useFirstName } from './name-prompt'
 import { SendDialog } from './send-dialog'
 import { ShowDialog } from './show-dialog'
 import { SummaryBar } from './summary-bar'
@@ -49,6 +51,17 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
     keepPreviousData: true,
   })
 
+  const { name: firstName, ready: nameReady, setName } = useFirstName()
+  const { viewers, announceChange } = useCalendarRealtime({
+    enabled: mode === 'remote' && Boolean(firstName),
+    name: firstName,
+    onChanged: () => {
+      void mutate()
+      void mutateMarkers()
+      void mutateSends()
+    },
+  })
+
   const { data: typicalStat, error: typicalError } = useSWR(
     ['typical-discovery', mode],
     () => source.getTypicalDiscoveryRevenue(),
@@ -68,9 +81,25 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   const openSend = (send: Send) => setSendEditor({ send, date: send.date, key: Date.now() })
   const openEdit = (show: Show) => setEditor({ show, date: show.date, key: Date.now() })
 
-  const handleSave = async (input: ShowInput) => {
-    await source.saveShow(input)
+  const handleSave = async (input: ShowInput): Promise<SaveShowResult> => {
+    const result = await source.saveShow(input)
+    if (result.status === 'conflict') return result
     setEditor(null)
+    await mutate()
+    announceChange()
+    return result
+  }
+
+  const handleReload = async () => {
+    const current = editor?.show
+    if (!current) return
+    const month = await source.getMonth(current.date.slice(0, 7))
+    const fresh = month.shows.find((s) => s.id === current.id)
+    if (!fresh) {
+      setEditor(null)
+    } else {
+      setEditor({ show: fresh, date: fresh.date, key: Date.now() })
+    }
     await mutate()
   }
 
@@ -78,20 +107,24 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
     await source.deleteShow(id)
     setEditor(null)
     await mutate()
+    announceChange()
   }
 
   const handleSaveOther = async (input: OtherRevenueInput) => {
     await source.saveOtherRevenue(input)
     await mutate()
+    announceChange()
   }
 
   const handleDeleteOther = async (id: string) => {
     await source.deleteOtherRevenue(id)
     await mutate()
+    announceChange()
   }
 
   const handleCopyOther = async () => {
     const result = await source.copyOtherRevenue(ym)
+    announceChange()
     return result
   }
 
@@ -99,22 +132,26 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
     await source.saveSend(input)
     setSendEditor(null)
     await mutateSends()
+    announceChange()
   }
 
   const handleDeleteSend = async (id: string) => {
     await source.deleteSend(id)
     setSendEditor(null)
     await mutateSends()
+    announceChange()
   }
 
   const handleSaveMarker = async (input: DayMarkerInput) => {
     await source.saveMarker(input)
     await mutateMarkers()
+    announceChange()
   }
 
   const handleDeleteMarker = async (id: string) => {
     await source.deleteMarker(id)
     await mutateMarkers()
+    announceChange()
   }
 
   const handleImportDone = async (result: ImportResult) => {
@@ -124,6 +161,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
     setImportMessage(parts.join(', '))
     window.setTimeout(() => setImportMessage(null), 6000)
     await mutate()
+    announceChange()
   }
 
   const handleSaveTarget = async (value: number) => {
@@ -134,6 +172,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
       },
       { optimisticData: { ...data, shows, otherRevenue, target: value }, rollbackOnError: true },
     )
+    announceChange()
   }
 
   return (
@@ -146,6 +185,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
         onAdd={() => openAdd(ym === thisMonth ? todayISO : `${ym}-01`)}
         onImport={mode === 'remote' ? () => setImporting(true) : undefined}
         view={view}
+        viewers={viewers}
         onViewChange={(next) => {
           setView(next)
           if (next === 'table') setHighlight(null)
@@ -214,11 +254,15 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
           featuredIn={editor.show ? featuredInNames(editor.show, sends) : []}
           getSuggestions={source.getPortalSuggestions}
           getMarkers={source.getMarkers}
+          editorName={firstName ?? ''}
           onClose={() => setEditor(null)}
+          onReload={editor.show ? handleReload : undefined}
           onSave={handleSave}
           onDelete={handleDelete}
         />
       )}
+
+      {nameReady && !firstName && <NamePrompt onSubmit={setName} />}
 
       {sendEditor && (
         <SendDialog

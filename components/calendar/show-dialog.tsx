@@ -23,6 +23,7 @@ import {
   type Organizer,
   type Region,
   type RevenueType,
+  type SaveShowResult,
   type Show,
   type ShowInput,
   type Status,
@@ -50,8 +51,10 @@ type Props = {
   featuredIn?: string[]
   getSuggestions?: (date: string) => Promise<PortalSuggestion[]>
   getMarkers?: (ym: string) => Promise<DayMarker[]>
+  editorName?: string
   onClose: () => void
-  onSave: (input: ShowInput) => Promise<void>
+  onReload?: () => Promise<void>
+  onSave: (input: ShowInput) => Promise<SaveShowResult>
   onDelete: (id: string) => Promise<void>
 }
 
@@ -274,7 +277,9 @@ export function ShowDialog({
   featuredIn = [],
   getSuggestions,
   getMarkers,
+  editorName = '',
   onClose,
+  onReload,
   onSave,
   onDelete,
 }: Props) {
@@ -311,7 +316,8 @@ export function ShowDialog({
   const [adjustedTotal, setAdjustedTotal] = useState(numStr(show?.adjustedTotal))
   const [adjustmentReason, setAdjustmentReason] = useState<AdjustmentReason | null>(show?.adjustmentReason ?? null)
   const [adjustmentNote, setAdjustmentNote] = useState(show?.adjustmentNote ?? '')
-  const [pending, setPending] = useState<'save' | 'delete' | null>(null)
+  const [pending, setPending] = useState<'save' | 'delete' | 'reload' | null>(null)
+  const [conflict, setConflict] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -361,9 +367,25 @@ export function ShowDialog({
 
   const canAdjust = Boolean(match) && !isFlat && organizedBy !== 'Local Producer'
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
+    return save(false)
+  }
+
+  const reload = async () => {
+    if (!onReload) return
+    setPending('reload')
+    try {
+      await onReload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reload this show.')
+      setPending(null)
+    }
+  }
+
+  const save = async (force: boolean) => {
     setError(null)
+    setConflict(false)
     const estimate = adjustedTotal === '' ? null : Number(adjustedTotal)
     if (estimate != null && adjustmentReason == null) {
       setError('Pick a reason for your estimate, or clear the adjustment.')
@@ -371,7 +393,7 @@ export function ShowDialog({
     }
     setPending('save')
     try {
-      await onSave({
+      const result = await onSave({
         id: show?.id,
         date,
         category,
@@ -396,7 +418,14 @@ export function ShowDialog({
         adjustmentReason: estimate == null ? null : adjustmentReason,
         adjustmentNote: estimate == null ? '' : adjustmentNote,
         modelTotalAtAdjustment: show?.modelTotalAtAdjustment ?? null,
+        updatedBy: editorName,
+        expectedUpdatedAt: show?.updatedAt ?? null,
+        force,
       })
+      if (result.status === 'conflict') {
+        setConflict(true)
+        setPending(null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save this show.')
       setPending(null)
@@ -439,6 +468,12 @@ export function ShowDialog({
               {show ? 'Edit show' : 'New show'}
             </h2>
             <p className="text-sm text-neutral-500">{date ? formatLongDate(date) : 'Pick a date'}</p>
+            {show?.updatedAt && (
+              <p className="text-sm text-neutral-500">
+                Last edited {show.updatedBy ? `by ${show.updatedBy}, ` : ''}
+                {timeAgo(show.updatedAt)}
+              </p>
+            )}
             {decideBy && (
               <p className="text-sm font-medium text-teal-800">
                 Decide by {formatDayShort(decideBy.date)}{' '}
@@ -663,6 +698,34 @@ export function ShowDialog({
         </div>
 
         <div className="flex flex-col gap-3 border-t border-neutral-100 px-6 py-5 sm:px-8">
+          {conflict && (
+            <div
+              role="alert"
+              className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            >
+              <p>This show was changed by someone else since you opened it.</p>
+              <div className="flex flex-wrap gap-2">
+                {onReload && (
+                  <button
+                    type="button"
+                    onClick={reload}
+                    disabled={pending !== null}
+                    className="h-10 rounded-lg bg-neutral-900 px-4 font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-60"
+                  >
+                    {pending === 'reload' ? 'Reloading…' : 'Reload'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => save(true)}
+                  disabled={pending !== null}
+                  className="h-10 rounded-lg border border-amber-300 bg-white px-4 font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
+                >
+                  Save anyway
+                </button>
+              </div>
+            </div>
+          )}
           {error && (
             <p role="alert" className="text-sm text-red-600">
               {error}
