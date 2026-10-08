@@ -9,6 +9,7 @@ export const ADJUSTMENT_MULTIPLIERS: Partial<Record<AdjustmentReason, number>> =
   'Heavy promotion': 1.2,
   'Artist draw': 1.15,
   Weather: 0.85,
+  'New producer or space': 1,
 }
 
 export function suggestedTotal(reason: AdjustmentReason, model: number | null): number | null {

@@ -164,8 +164,10 @@ function EstimateEditor({
           {model != null ? `Model: ~${Math.round(model)}${range ? ` (${range})` : ''}` : 'No model projection yet'}
         </span>
       </div>
-      <div role="group" aria-label="Reason for your estimate" className="flex flex-wrap gap-1.5">
-        {ADJUSTMENT_REASONS.map((r) => (
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-neutral-600">Reason</span>
+        <div role="group" aria-label="Reason for your estimate" className="flex flex-wrap gap-1.5">
+          {ADJUSTMENT_REASONS.map((r) => (
           <button
             key={r}
             type="button"
@@ -180,18 +182,23 @@ function EstimateEditor({
           >
             {r}
           </button>
-        ))}
+          ))}
+        </div>
       </div>
       {value !== '' && reason == null && <p className="text-xs text-red-600">Pick a reason for your estimate.</p>}
       {value !== '' && (
-        <input
-          aria-label="Estimate note"
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${idPrefix}-note`} className="text-xs font-medium text-neutral-600">Note (optional)</label>
+          <input
+            id={`${idPrefix}-note`}
+            aria-label="Estimate note"
           value={note}
           maxLength={500}
           placeholder="Note (optional)"
           onChange={(e) => onNote(e.target.value)}
-          className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 placeholder:text-neutral-300 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
-        />
+            className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 placeholder:text-neutral-300 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+          />
+        </div>
       )}
       {hasAdjustment && (
         <button
@@ -355,6 +362,7 @@ export function ShowDialog({
 
   const pickReason = (reason: AdjustmentReason) => {
     setAdjustmentReason(reason)
+    if (adjustedTotal !== '') return
     const suggestion = suggestedTotal(reason, match ? modelTotal(match) : null)
     if (suggestion != null) setAdjustedTotal(String(suggestion))
   }
