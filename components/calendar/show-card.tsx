@@ -115,17 +115,18 @@ function TicketsLine({
 // Real money (actual, in, flat fee) is normal weight; anything projected or planned is lighter and marked with "~".
 const ESTIMATE = 'opacity-60'
 
-function MoneyLine({ money, className }: { money: CardMoney; className: string }) {
+function MoneyLine({ money, className, tentative = false }: { money: CardMoney; className: string; tentative?: boolean }) {
   return (
-    <span className={cn('mt-0.5 flex flex-wrap items-baseline gap-x-1 text-[11px] leading-snug tabular-nums', className)}>
+    <span className={cn('mt-0.5 flex flex-wrap items-baseline gap-x-1 text-[11px] leading-snug tabular-nums', className, tentative && 'italic text-neutral-500')}>
+      {tentative && <span>~</span>}
       {money.kind === 'actual' && <span>{formatCurrency(money.amount)}</span>}
       {money.kind === 'flat' && <span>{formatCurrency(money.amount)} flat fee</span>}
-      {money.kind === 'plan' && <span className={ESTIMATE}>~{formatCurrency(money.amount)} plan</span>}
+      {money.kind === 'plan' && <span className={tentative ? undefined : ESTIMATE}>{!tentative && '~'}{formatCurrency(money.amount)} plan</span>}
       {money.kind === 'linked' && (
         <>
           {money.sold != null && <span>{formatCurrency(money.sold)} in</span>}
-          {money.sold != null && money.projected > 0 && <span className={ESTIMATE}>·</span>}
-          {money.projected > 0 && <span className={ESTIMATE}>~{formatCurrency(money.projected)} proj</span>}
+          {money.sold != null && money.projected > 0 && <span className={tentative ? undefined : ESTIMATE}>·</span>}
+          {money.projected > 0 && <span className={tentative ? undefined : ESTIMATE}>{!tentative && '~'}{formatCurrency(money.projected)} proj</span>}
         </>
       )}
     </span>
@@ -221,6 +222,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
   const styles = CATEGORY_STYLES[show.category]
   const cancelled = show.status === 'Cancelled'
   const solid = show.status === 'Confirmed'
+  const tentative = show.status === 'Idea' || show.status === 'Tentative'
   const flat = show.revenueType === 'Flat fee'
   const local = isLocalProducer(show)
   const money = cardMoney(show, match, past)
@@ -237,18 +239,30 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
       aria-label={`${show.format}${show.venue ? ` at ${show.venue}` : ''}, ${statusLabel(show.status)}. Edit show`}
       className={cn(
         'group relative block w-full rounded-lg border px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-1',
-        styles.card,
-        solid ? 'border-solid' : 'border-dashed',
+        tentative
+          ? 'border-[1.5px] border-dashed border-[#B8B2A6] bg-transparent text-[#6F685D] opacity-85 hover:bg-transparent hover:opacity-100'
+          : styles.card,
+        solid && 'border-solid border-l-4 border-l-emerald-500',
         cancelled && 'line-through opacity-45',
         emphasis === 'on' && 'ring-2 ring-neutral-900 ring-offset-1',
         emphasis === 'off' && 'opacity-30',
       )}
+      style={
+        tentative
+          ? { backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.035) 6px 7px)' }
+          : undefined
+      }
     >
-      <span className={cn('block text-sm font-semibold leading-snug', !show.venue && 'font-normal opacity-60')}>
+      {tentative && (
+        <span className="mb-1 inline-block rounded-sm bg-[#EFEAE0] px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-[#6F685D]">
+          {show.status}
+        </span>
+      )}
+      <span className={cn('block text-sm leading-snug', tentative ? 'font-normal text-[#6F685D]' : 'font-semibold', !show.venue && 'opacity-60')}>
         {venueName}
       </span>
-      <span className={cn('flex items-center gap-1.5 text-xs leading-snug', styles.sub)}>
-        <span className={cn('size-2 shrink-0 rounded-full', styles.dot)} aria-hidden />
+      <span className={cn('flex items-center gap-1.5 text-xs leading-snug', tentative ? 'text-[#6F685D]' : styles.sub)}>
+        <span className={cn('size-2 shrink-0 rounded-full', tentative ? 'border-[1.5px] border-current bg-transparent' : styles.dot)} aria-hidden />
         <span className="min-w-0 whitespace-normal break-words">
           {show.format}
           {show.region !== 'LA' && <span className="text-[11px] opacity-75"> · {show.region}</span>}
@@ -273,7 +287,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
         )}
       </span>
       {!flat && !local && match && <TicketsLine show={show} match={match} past={past} className={styles.sub} />}
-      {money && <MoneyLine money={money} className={styles.sub} />}
+      {money && <MoneyLine money={money} className={tentative ? 'text-[#6F685D]' : styles.sub} tentative={tentative} />}
       {isUpcoming(show.date) && !show.merchandised && (
         <span className="mt-1 block text-[10px] leading-snug text-neutral-500">Not Merchandised</span>
       )}
