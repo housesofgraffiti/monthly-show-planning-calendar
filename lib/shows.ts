@@ -32,6 +32,7 @@ export const ADJUSTMENT_REASONS = [
   'Heavy promotion',
   'Artist draw',
   'Weather',
+  'New producer or space',
   'Other',
 ] as const
 export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number]
