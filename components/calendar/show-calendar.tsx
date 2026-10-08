@@ -200,7 +200,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-8 md:py-12">
+    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 max-sm:pb-28 sm:gap-8 sm:px-8 sm:py-8 md:py-12">
       <CalendarHeader
         ym={ym}
         onToday={() => setYm(thisMonth)}

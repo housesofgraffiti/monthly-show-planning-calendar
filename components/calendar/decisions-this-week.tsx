@@ -29,7 +29,7 @@ export function DecisionsThisWeek({ decisions, portal, onOpen }: Props) {
                 type="button"
                 onClick={() => onOpen(show)}
                 aria-label={`Open ${show.venue || show.format}, decide by ${formatDayShort(decideBy.date)}`}
-                className="flex w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-lg px-1 py-2 text-left text-sm transition-colors hover:bg-teal-100/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+                className="flex min-h-11 w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-lg px-1 py-2.5 text-left text-sm transition-colors hover:bg-teal-100/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
               >
                 <span className="font-semibold text-teal-800">Decide by {formatDayShort(decideBy.date)}</span>
                 <span className="font-medium text-neutral-900">{show.venue || show.area || 'Venue TBD'}</span>

@@ -128,7 +128,7 @@ export function ProgressToTarget({
 
       <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-neutral-600">
         {segments.map((s) => (
-          <li key={s.key} className="flex items-center gap-2">
+          <li key={s.key} className="flex min-w-0 flex-wrap items-center gap-x-2">
             <span
               aria-hidden
               className={cn('size-3 rounded-full border border-neutral-900/10', s.className)}

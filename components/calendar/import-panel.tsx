@@ -82,7 +82,7 @@ export function ImportPanel({ ym, getCandidates, onImport, onClose, onDone }: Pr
       onClick={(e) => {
         if (e.target === ref.current) onClose()
       }}
-      className="m-auto max-h-[min(92dvh,48rem)] w-[calc(100%-1.5rem)] max-w-2xl overflow-hidden rounded-3xl bg-white p-0 text-neutral-900 shadow-2xl backdrop:bg-neutral-900/30 backdrop:backdrop-blur-[2px]"
+      className="m-auto max-h-[min(92dvh,48rem)] w-[calc(100%-1.5rem)] max-w-2xl overflow-hidden rounded-3xl max-sm:mb-0 max-sm:max-h-[94dvh] max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none bg-white p-0 text-neutral-900 shadow-2xl backdrop:bg-neutral-900/30 backdrop:backdrop-blur-[2px]"
     >
       <div className="flex max-h-[inherit] flex-col">
         <div className="flex items-start justify-between gap-4 border-b border-neutral-100 px-6 pb-5 pt-6 sm:px-8">
