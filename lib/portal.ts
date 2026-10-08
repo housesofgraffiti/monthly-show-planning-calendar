@@ -1,9 +1,14 @@
 import type { Organizer, Show } from './shows'
 
 export type PortalProjection = {
+  // Paid-only projection (projected_tickets, low, high).
   tickets: number | null
   low: number | null
   high: number | null
+  // Total projection including comps (projected_total, total_low, total_high).
+  totalTickets: number | null
+  totalLow: number | null
+  totalHigh: number | null
   revenue: number | null
   revenueLow: number | null
   revenueHigh: number | null
@@ -29,7 +34,12 @@ export function resolveConfidence(tier: string | null, legacy: string | null): C
 export type PortalMatch = {
   eventId: string
   hasEvent: boolean
+  // Paid tickets only. Revenue is paid only too.
   confirmed: number | null
+  compTickets: number | null
+  // Paid plus comp, as shown in the portal.
+  totalTickets: number | null
+  vips: number | null
   ticketsAvailable: number | null
   revenue: number | null
   projection: PortalProjection | null
@@ -60,18 +70,42 @@ export function portalFor(show: Show, portal: PortalMap | undefined): PortalMatc
 
 export const isPastShow = (show: Show, todayISO: string) => show.date < todayISO
 
-export function soldLabel(m: PortalMatch) {
-  return `${m.confirmed ?? 0}/${m.ticketsAvailable ?? '—'} sold`
+// Every ticket count shown to the team is a total (paid + comp). When the total column is empty
+// it falls back to the paid column.
+export function confirmedTotal(m: PortalMatch): number | null {
+  return m.totalTickets ?? m.confirmed
+}
+
+export function compCount(m: PortalMatch): number {
+  if (m.compTickets != null) return m.compTickets
+  if (m.totalTickets != null && m.confirmed != null) return Math.max(0, m.totalTickets - m.confirmed)
+  return 0
+}
+
+export function confirmedLabel(m: PortalMatch) {
+  return `${confirmedTotal(m) ?? 0}/${m.ticketsAvailable ?? '—'}`
 }
 
 export function sellThrough(m: PortalMatch): number | null {
-  if (!m.hasEvent || m.confirmed == null || !m.ticketsAvailable) return null
-  return m.confirmed / m.ticketsAvailable
+  const total = confirmedTotal(m)
+  if (!m.hasEvent || total == null || !m.ticketsAvailable) return null
+  return total / m.ticketsAvailable
+}
+
+export function projectedTotal(p: PortalProjection): number | null {
+  return p.totalTickets ?? p.tickets
+}
+
+export function projectedRange(p: PortalProjection): [number, number] | null {
+  if (p.totalLow != null && p.totalHigh != null) return [p.totalLow, p.totalHigh]
+  if (p.low != null && p.high != null) return [p.low, p.high]
+  return null
 }
 
 export function rangeLabel(p: PortalProjection, separator = ' to ') {
-  if (p.low == null || p.high == null) return null
-  return `${Math.round(p.low)}${separator}${Math.round(p.high)}`
+  const range = projectedRange(p)
+  if (!range) return null
+  return `${Math.round(range[0])}${separator}${Math.round(range[1])}`
 }
 
 export function paceTag(label: string | null | undefined): 'Behind' | 'Ahead' | null {
