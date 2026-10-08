@@ -51,15 +51,14 @@ function hasTicketsLine(match: PortalMatch, past: boolean) {
   return match.hasEvent || (match.projection != null && projectedTotal(match.projection) != null)
 }
 
-function isUpcomingWithin14Days(date: string) {
+function isUpcoming(date: string) {
   const today = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Los_Angeles',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).format(new Date())
-  const days = (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
-  return days >= 0 && days <= 14
+  return Date.parse(`${date}T00:00:00Z`) >= Date.parse(`${today}T00:00:00Z`)
 }
 
 function Tag({ tag }: { tag: CardTag }) {
@@ -275,7 +274,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
       </span>
       {!flat && !local && match && <TicketsLine show={show} match={match} past={past} className={styles.sub} />}
       {money && <MoneyLine money={money} className={styles.sub} />}
-      {isUpcomingWithin14Days(show.date) && !show.merchandised && (
+      {isUpcoming(show.date) && !show.merchandised && (
         <span className="mt-1 block text-[10px] leading-snug text-neutral-500">Not Merchandised</span>
       )}
       {tag && (
