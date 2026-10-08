@@ -45,11 +45,18 @@ export function useCalendarRealtime({ enabled, name, onChanged }: Options) {
     channel.on('broadcast', { event: 'changed' }, () => onChangedRef.current())
     channel.on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState<{ name?: string }>()
-      const next: Viewer[] = []
+      const byName = new Map<string, Viewer>()
       for (const [id, metas] of Object.entries(state)) {
-        const viewerName = metas[0]?.name
-        if (viewerName) next.push({ id, name: viewerName, isSelf: id === clientId })
+        const viewerName = metas[0]?.name?.trim()
+        if (!viewerName) continue
+        const nameKey = viewerName.toLocaleLowerCase()
+        const viewer = { id, name: viewerName, isSelf: id === clientId }
+        const existing = byName.get(nameKey)
+        // One person can have multiple active browser sessions. Keep one bubble per name,
+        // preferring the current session so it remains labelled "(you)".
+        if (!existing || viewer.isSelf) byName.set(nameKey, viewer)
       }
+      const next = [...byName.values()]
       next.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
       setViewers(next)
     })
