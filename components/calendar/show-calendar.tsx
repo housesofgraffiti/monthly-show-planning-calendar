@@ -28,7 +28,15 @@ type Editor = { show?: Show; date: string; key: number }
 type SendEditor = { send?: Send; date: string; key: number }
 type View = 'calendar' | 'table' | 'venues'
 
-export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: string }) {
+export function ShowCalendar({
+  mode,
+  todayISO,
+  tourSeen,
+}: {
+  mode: DataMode
+  todayISO: string
+  tourSeen: boolean
+}) {
   const thisMonth = todayISO.slice(0, 7)
   const [ym, setYm] = useState(thisMonth)
   const [view, setView] = useState<View>('calendar')
@@ -81,7 +89,7 @@ export function ShowCalendar({ mode, todayISO }: { mode: DataMode; todayISO: str
 
   const dataReady = data !== undefined
   useEffect(() => {
-    if (!firstName || !dataReady || hasSeenTour()) return
+    if (!firstName || !dataReady || tourSeen || hasSeenTour()) return
     // Wait for the page to paint so every section can be measured.
     const timer = window.setTimeout(startTour, 600)
     return () => window.clearTimeout(timer)
