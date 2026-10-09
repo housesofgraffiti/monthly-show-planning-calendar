@@ -1,4 +1,6 @@
+import { cookies } from 'next/headers'
 import { ShowCalendar } from '@/components/calendar/show-calendar'
+import { TOUR_SEEN_COOKIE } from '@/lib/tour-cookie'
 import { PasscodeGate } from '@/components/passcode-gate'
 import { isSupabaseConfigured } from '@/lib/supabase-admin'
 import { PASSCODE_ENABLED, hasTeamAccess } from '@/lib/team-access'
@@ -29,5 +31,7 @@ export default async function Page() {
     if (!(await hasTeamAccess())) return <PasscodeGate />
   }
 
-  return <ShowCalendar mode={mode} todayISO={todayInLosAngeles()} />
+  const tourSeen = (await cookies()).get(TOUR_SEEN_COOKIE)?.value === '1'
+
+  return <ShowCalendar mode={mode} todayISO={todayInLosAngeles()} tourSeen={tourSeen} />
 }

@@ -19,8 +19,10 @@ function markTourSeen() {
   try {
     window.localStorage.setItem(SEEN_KEY, '1')
   } catch {
-    // Not remembered; the tour will offer itself again next visit.
+    // The cookie below still remembers it.
   }
+  // A server-set cookie survives storage purges and covers browsers that block localStorage.
+  void fetch('/api/tour-seen', { method: 'POST' }).catch(() => {})
 }
 
 function firstVisible(selector: string) {
