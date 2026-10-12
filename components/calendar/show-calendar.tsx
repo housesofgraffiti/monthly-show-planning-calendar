@@ -18,6 +18,7 @@ import { ImportPanel } from './import-panel'
 import { MarkersDialog } from './markers-dialog'
 import { MonthGrid } from './month-grid'
 import { NamePrompt, useFirstName } from './name-prompt'
+import { PortalStatusBanner } from './portal-status-banner'
 import { SendDialog } from './send-dialog'
 import { ShowDialog } from './show-dialog'
 import { SummaryBar } from './summary-bar'
@@ -85,6 +86,9 @@ export function ShowCalendar({
     () => source.getTypicalDiscoveryRevenue(),
     { revalidateOnFocus: false },
   )
+  const { data: portalStatus } = useSWR(['portal-status', mode], () => source.getPortalStatus(), {
+    refreshInterval: 30_000,
+  })
   const typical = typicalStat !== undefined ? typicalDiscovery(typicalStat) : typicalError ? typicalDiscovery(null) : null
 
   const dataReady = data !== undefined
@@ -208,6 +212,8 @@ export function ShowCalendar({
   }
 
   return (
+    <>
+    <PortalStatusBanner status={portalStatus?.status ?? null} since={portalStatus?.since ?? null} />
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 max-sm:pb-28 sm:gap-8 sm:px-8 sm:py-8 md:py-12">
       <CalendarHeader
         ym={ym}
@@ -365,5 +371,6 @@ export function ShowCalendar({
         </div>
       )}
     </main>
+    </>
   )
 }
