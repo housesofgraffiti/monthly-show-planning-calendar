@@ -288,6 +288,25 @@ export async function getTypicalDiscoveryRevenue(): Promise<number | null> {
   return toNum((data as { value: number | string | null } | null)?.value ?? null)
 }
 
+export type PortalStatus = { status: number | null; since: number | null }
+
+// portal_status is 1 (ok) or 0 (connection lost); portal_status_since is unix seconds (UTC).
+// Missing or unreadable rows return nulls so the banner stays hidden.
+export async function getPortalStatus(): Promise<PortalStatus> {
+  await requireAccess()
+  const { data, error } = await getSupabaseAdmin()
+    .from('planning_stats')
+    .select('key, value')
+    .in('key', ['portal_status', 'portal_status_since'])
+  if (error) {
+    console.error('Could not read portal status:', error.message)
+    return { status: null, since: null }
+  }
+  const rows = (data ?? []) as { key: string; value: number | string | null }[]
+  const valueOf = (key: string) => toNum(rows.find((r) => r.key === key)?.value ?? null)
+  return { status: valueOf('portal_status'), since: valueOf('portal_status_since') }
+}
+
 type OtherRevenueRow = { id: string; month: string; label: string; amount: number | string }
 
 const fromOtherRevenueRow = (row: OtherRevenueRow): OtherRevenueLine => ({
