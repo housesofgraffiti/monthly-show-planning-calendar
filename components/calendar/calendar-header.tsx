@@ -7,6 +7,7 @@ import type { Viewer } from '@/lib/use-calendar-realtime'
 import { CATEGORY_STYLES } from './category-styles'
 import { HelpMenu } from './help-menu'
 import { PresenceBubbles } from './presence-bubbles'
+import { SyncNowButton } from './sync-now-button'
 
 type View = 'calendar' | 'table' | 'venues'
 
@@ -213,12 +214,14 @@ export function Legend({
   onMarkers,
   showSends,
   onToggleSends,
+  onSynced,
 }: {
   syncing: boolean
   portalSyncedAt?: string | null
   onMarkers?: () => void
   showSends?: boolean
   onToggleSends?: () => void
+  onSynced?: () => void
 }) {
   const stale = portalSyncedAt ? isStale(portalSyncedAt) : false
   return (
@@ -275,6 +278,7 @@ export function Legend({
             Portal synced {timeAgo(portalSyncedAt)}
           </p>
         )}
+        {onSynced && <SyncNowButton onSynced={onSynced} />}
         <p className="text-neutral-500" aria-live="polite">
           {syncing ? 'Syncing…' : 'Syncs every 30s'}
         </p>

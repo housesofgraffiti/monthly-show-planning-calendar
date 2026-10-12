@@ -255,6 +255,7 @@ export function ShowCalendar({
             onMarkers={() => setEditingMarkers(true)}
             showSends={showSends}
             onToggleSends={() => setShowSends((on) => !on)}
+            onSynced={mode === 'remote' ? () => void mutate() : undefined}
           />
         )}
         {error && (
