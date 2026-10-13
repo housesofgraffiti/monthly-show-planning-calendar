@@ -30,6 +30,7 @@ import {
 } from '@/lib/shows'
 import {
   capitalize,
+  paceTag,
   compCount,
   CONFIDENCE_NOTES,
   confirmedTotal,
@@ -41,9 +42,21 @@ import {
 } from '@/lib/portal'
 import { modelTotal, suggestedTotal } from '@/lib/adjustments'
 import { markersOn, type DayMarker } from '@/lib/markers'
+import { FIELD_HELP, SYMBOL_HELP, TAG_HELP } from '@/lib/glossary'
+import { SHOW_FORM_STEPS, type TourStep } from '@/lib/tour'
 import { CATEGORY_STYLES } from './category-styles'
+import { hasSeenShowTour, markShowTourSeen } from './guided-tour'
+import { InfoLabel } from './info-label'
+
+const STATUS_OPTION_LABELS: Record<string, string> = {
+  Idea: 'Idea (just a thought)',
+  Tentative: 'Tentative (likely, not locked in)',
+  Confirmed: 'On sale (event page is live)',
+  Cancelled: 'Cancelled',
+}
 
 type Props = {
+  autoTour?: boolean
   show?: Show
   date: string
   match?: PortalMatch
@@ -67,6 +80,7 @@ function Field({
   htmlFor,
   optional,
   aside,
+  info,
   className,
   children,
 }: {
@@ -74,19 +88,51 @@ function Field({
   htmlFor: string
   optional?: boolean
   aside?: React.ReactNode
+  info?: string
   className?: string
   children: React.ReactNode
 }) {
+  const labelEl = (
+    <label htmlFor={htmlFor} className="text-sm font-medium text-neutral-700">
+      {label} {optional && <span className="font-normal text-neutral-400">optional</span>}
+    </label>
+  )
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      <div className="flex items-baseline justify-between">
-        <label htmlFor={htmlFor} className="text-sm font-medium text-neutral-700">
-          {label} {optional && <span className="font-normal text-neutral-400">optional</span>}
-        </label>
+      <div className="flex items-baseline justify-between gap-2">
+        {info ? <InfoLabel info={info}>{labelEl}</InfoLabel> : labelEl}
         {aside}
       </div>
       {children}
     </div>
+  )
+}
+
+function Section({
+  tourId,
+  title,
+  hint,
+  active,
+  children,
+}: {
+  tourId: string
+  title: string
+  hint?: string
+  active: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <section
+      data-tour={tourId}
+      aria-label={title}
+      className={cn('flex flex-col gap-5 rounded-2xl transition-shadow', active && 'ring-2 ring-neutral-900 ring-offset-8')}
+    >
+      <div className="flex flex-col gap-0.5">
+        <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+        {hint && <p className="text-sm text-neutral-500">{hint}</p>}
+      </div>
+      {children}
+    </section>
   )
 }
 
@@ -147,11 +193,13 @@ function EstimateEditor({
   const hasAdjustment = value !== '' || reason != null || note !== ''
 
   return (
-    <div className="flex flex-col gap-2.5 border-t border-neutral-200 pt-3">
+    <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <label htmlFor={`${idPrefix}-estimate`} className="text-sm font-medium text-neutral-700">
-          Your estimate
-        </label>
+        <InfoLabel info={FIELD_HELP.estimate}>
+          <label htmlFor={`${idPrefix}-estimate`} className="text-sm font-medium text-neutral-700">
+            Your estimate
+          </label>
+        </InfoLabel>
         <input
           id={`${idPrefix}-estimate`}
           inputMode="numeric"
@@ -161,7 +209,7 @@ function EstimateEditor({
           className="h-9 w-32 rounded-lg border border-neutral-200 bg-white px-3 text-sm tabular-nums text-neutral-900 placeholder:text-neutral-300 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
         />
         <span className="text-xs text-neutral-500 tabular-nums">
-          {model != null ? `Model: ~${Math.round(model)}${range ? ` (${range})` : ''}` : 'No model projection yet'}
+          {model != null ? `Our number: ~${Math.round(model)}${range ? ` (${range})` : ''}` : 'No expected total from us yet'}
         </span>
       </div>
       <div className="flex flex-col gap-1.5">
@@ -212,7 +260,7 @@ function EstimateEditor({
   )
 }
 
-function PortalSummary({ match, estimate }: { match: PortalMatch; estimate?: React.ReactNode }) {
+function PortalSummary({ match }: { match: PortalMatch }) {
   const p = match.projection
   const range = p ? rangeLabel(p) : null
   const rows: [string, React.ReactNode][] = []
@@ -220,45 +268,48 @@ function PortalSummary({ match, estimate }: { match: PortalMatch; estimate?: Rea
     const total = confirmedTotal(match) ?? 0
     const comps = compCount(match)
     const paid = Math.max(0, total - comps)
-    const capacity = match.ticketsAvailable != null ? ` of ${match.ticketsAvailable}` : ''
-    rows.push(['Tickets', `${total} confirmed (${paid} paid, ${comps} comp)${capacity}`])
-    if (match.ticketPrices) rows.push(['Prices', match.ticketPrices])
+    const capacity = match.ticketsAvailable != null ? `, ${match.ticketsAvailable} available` : ''
+    rows.push(['Tickets sold', `${total} (${paid} paid, ${comps} comp)${capacity}`])
+    if (match.ticketPrices) rows.push(['Ticket prices', match.ticketPrices])
     if (match.ticketMix) rows.push(['Mix', match.ticketMix])
     if (match.vips) rows.push(['VIPs', String(match.vips)])
-    if (match.revenue != null) rows.push(['Actual revenue', formatCurrency(match.revenue)])
+    if (match.revenue != null) rows.push(['Revenue so far', formatCurrency(match.revenue)])
   }
   if (p) {
     const total = projectedTotal(p)
     if (total != null) {
-      const paidNote = p.tickets != null ? ` · paid ~${Math.round(p.tickets)}` : ''
-      rows.push(['Projection', `~${Math.round(total)} total${range ? ` (${range})` : ''}${paidNote}`])
+      const paidNote = p.tickets != null ? `, about ${Math.round(p.tickets)} paid` : ''
+      rows.push(['Expected total', `~${Math.round(total)} tickets${range ? ` (${range})` : ''}${paidNote}`])
     }
     if (p.revenue != null) {
       const revenueRange =
         p.revenueLow != null && p.revenueHigh != null
           ? ` (${formatCurrency(p.revenueLow)} to ${formatCurrency(p.revenueHigh)})`
           : ''
-      rows.push(['Proj. revenue', `${formatCurrency(p.revenue)}${revenueRange}`])
+      rows.push(['Expected revenue', `${formatCurrency(p.revenue)}${revenueRange}`])
     }
   }
   if (p?.confidence) {
     rows.push([
-      'Confidence',
+      'How sure we are',
       <>
         {capitalize(p.confidence)}
         <span className="block text-xs text-neutral-500">{CONFIDENCE_NOTES[p.confidence]}</span>
       </>,
     ])
   }
-  if (p?.paceLabel) rows.push(['Pace', capitalize(p.paceLabel)])
-  if (rows.length === 0 && !estimate) return null
+  if (p?.paceLabel) {
+    const pace = paceTag(p.paceLabel)
+    rows.push([
+      'Sales pace',
+      pace === 'Behind' ? TAG_HELP.Behind : pace === 'Ahead' ? TAG_HELP.Ahead : capitalize(p.paceLabel),
+    ])
+  }
+  if (rows.length === 0) return null
 
   return (
-    <section aria-label="From portal" className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-medium text-neutral-700">From portal</h3>
-        {p?.computedAt && <span className="text-xs text-neutral-400">updated {timeAgo(p.computedAt)}</span>}
-      </div>
+    <div className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+      {p?.computedAt && <span className="text-xs text-neutral-400">Updated {timeAgo(p.computedAt)}</span>}
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
@@ -270,8 +321,7 @@ function PortalSummary({ match, estimate }: { match: PortalMatch; estimate?: Rea
       {p?.selloutLikely && (
         <p className="w-fit rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Sellout likely</p>
       )}
-      {estimate}
-    </section>
+    </div>
   )
 }
 
@@ -284,6 +334,7 @@ export function ShowDialog({
   getSuggestions,
   getMarkers,
   editorName = '',
+  autoTour = false,
   onClose,
   onReload,
   onSave,
@@ -327,9 +378,30 @@ export function ShowDialog({
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
+  const [tourSteps, setTourSteps] = useState<TourStep[] | null>(null)
+  const [tourIndex, setTourIndex] = useState(0)
+  const activeTourId = tourSteps?.[tourIndex]?.id
+
   useEffect(() => {
     ref.current?.showModal()
+    if (!autoTour && hasSeenShowTour()) return
+    // The dialog sits in the browser's top layer, so this tour is drawn inside it rather than with driver.js.
+    const timer = window.setTimeout(() => {
+      markShowTourSeen()
+      const steps = SHOW_FORM_STEPS.filter((step) => ref.current?.querySelector(step.selector))
+      if (steps.length > 0) {
+        setTourSteps(steps)
+        setTourIndex(0)
+      }
+    }, 500)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!activeTourId) return
+    ref.current?.querySelector(`[data-tour="${activeTourId}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [activeTourId])
 
   const wantSuggestions = Boolean(getSuggestions) && portalEventId.trim() === '' && DATE_RE.test(date)
   const { data: suggestions } = useSWR(wantSuggestions ? ['portal-suggestions', date] : null, () =>
@@ -477,15 +549,6 @@ export function ShowDialog({
                 {timeAgo(show.updatedAt)}
               </p>
             )}
-            {decideBy && (
-              <p className="text-sm font-medium text-teal-800">
-                Decide by {formatDayShort(decideBy.date)}{' '}
-                <span className="font-normal text-neutral-500">· {decideBySource(decideBy)}</span>
-              </p>
-            )}
-            {featuredIn.length > 0 && (
-              <p className="text-sm text-neutral-500">Featured in {featuredIn.join(', ')}</p>
-            )}
           </div>
           <button
             type="button"
@@ -497,208 +560,315 @@ export function ShowDialog({
           </button>
         </div>
 
-        <div className="flex flex-col gap-6 overflow-y-auto px-6 py-6 sm:px-8">
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 text-sm font-medium text-neutral-700">Category</legend>
-            <div className="grid grid-cols-3 gap-2.5">
-              {CATEGORIES.map((c) => {
-                const active = c === category
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => pickCategory(c)}
-                    className={cn(
-                      'flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] transition-colors',
-                      active ? CATEGORY_STYLES[c].selected : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50',
-                    )}
-                  >
-                    <span className={cn('size-2 rounded-full', CATEGORY_STYLES[c].dot)} aria-hidden />
-                    {c}
-                  </button>
-                )
-              })}
-            </div>
-          </fieldset>
-
-          <Field label="Format" htmlFor={f('format')}>
-            <Select id={f('format')} value={format} onChange={pickFormat} options={FORMATS[category]} />
-          </Field>
-
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Field label="Date" htmlFor={f('date')}>
-              <input id={f('date')} type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-              {dateMarkers.map((m) => (
-                <p key={m.id} className={cn('text-xs', m.type === 'event' ? 'text-amber-700' : 'text-neutral-500')}>
-                  {m.label}
-                  {m.note && ` · ${m.note}`}
-                </p>
-              ))}
-            </Field>
-            <Field label="Status" htmlFor={f('status')}>
-              <Select id={f('status')} value={status} onChange={(v) => setStatus(v as Status)} options={STATUSES} labels={STATUS_LABELS} />
-            </Field>
-            <Field label="Region" htmlFor={f('region')}>
-              <Select id={f('region')} value={region} onChange={(v) => setRegion(v as Region)} options={REGIONS} />
-            </Field>
-            <Field label="Organized by" htmlFor={f('organizedBy')}>
-              <Select
-                id={f('organizedBy')}
-                value={organizedBy}
-                onChange={(v) => setOrganizedBy(v as Organizer)}
-                options={ORGANIZERS}
-              />
-            </Field>
-            <Field label="Area" htmlFor={f('area')}>
-              <input id={f('area')} value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. Venice" maxLength={120} className={inputCls} />
-            </Field>
-            <Field label="Venue" htmlFor={f('venue')}>
-              <input id={f('venue')} value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" maxLength={160} className={inputCls} />
-            </Field>
-            <Field label="Revenue type" htmlFor={f('revenueType')}>
-              <Select
-                id={f('revenueType')}
-                value={revenueType}
-                onChange={(v) => setRevenueType(v as RevenueType)}
-                options={REVENUE_TYPES}
-              />
-            </Field>
-            <Field label="Venue fee" htmlFor={f('venueFee')} optional>
-              <MoneyInput id={f('venueFee')} value={venueFee} onChange={setVenueFee} />
-            </Field>
-            {isFlat ? (
-              <Field label="Flat fee" htmlFor={f('flatFee')}>
-                <MoneyInput id={f('flatFee')} value={flatFee} onChange={setFlatFee} />
-              </Field>
-            ) : (
-              <>
-                <Field label="Tickets" htmlFor={f('tickets')}>
-                  <input
-                    id={f('tickets')}
-                    inputMode="numeric"
-                    value={tickets}
-                    placeholder="0"
-                    onChange={(e) => setTickets(e.target.value.replace(/\D/g, ''))}
-                    className={cn(inputCls, 'tabular-nums')}
-                  />
-                </Field>
-                <Field label="Ticket price" htmlFor={f('price')}>
-                  <MoneyInput id={f('price')} value={price} onChange={setPrice} />
-                </Field>
-              </>
-            )}
-          </div>
-
-          {!isFlat && (
-          <Field
-            label="Projected revenue"
-            htmlFor={f('revenue')}
-            aside={
-              revenueOverride != null ? (
-                <button type="button" onClick={() => setRevenueOverride(null)} className="text-xs text-neutral-500 underline-offset-2 hover:underline">
-                  Reset to tickets × price
-                </button>
-              ) : (
-                <span className="text-xs text-neutral-400">Tickets × price</span>
-              )
-            }
-          >
-            <MoneyInput
-              id={f('revenue')}
-              value={revenueValue}
-              onChange={(v) => setRevenueOverride(v === '' && computed == null ? null : v)}
-            />
-          </Field>
-          )}
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:gap-8">
-            <label className="flex items-start gap-3 text-[15px] text-neutral-700">
-              <input
-                type="checkbox"
-                checked={merchandised}
-                onChange={(e) => setMerchandised(e.target.checked)}
-                className="mt-0.5 size-5 rounded border-neutral-300 accent-neutral-900"
-              />
-              <span>
-                Merchandised
-                <span className="block text-xs text-neutral-500">Event page updated for this show</span>
-              </span>
-            </label>
-            <label className="flex items-center gap-3 text-[15px] text-neutral-700">
-              <input
-                type="checkbox"
-                checked={merch}
-                onChange={(e) => setMerch(e.target.checked)}
-                className="size-5 rounded border-neutral-300 accent-neutral-900"
-              />
-              Merch table at this show
-            </label>
-            <label className="flex items-center gap-3 text-[15px] text-neutral-700">
-              <input
-                type="checkbox"
-                checked={eventPlanner}
-                onChange={(e) => setEventPlanner(e.target.checked)}
-                className="size-5 rounded border-neutral-300 accent-neutral-900"
-              />
-              Event planner
-            </label>
-          </div>
-
-          <Field label="Portal event ID" htmlFor={f('portal')} optional>
-            <input id={f('portal')} value={portalEventId} onChange={(e) => setPortalEventId(e.target.value)} maxLength={120} className={inputCls} />
-            {wantSuggestions && suggestions && suggestions.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-neutral-400">Portal events on this date</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestions.map((s) => (
+        <div className="flex flex-col gap-10 overflow-y-auto px-6 py-6 sm:px-8">
+          <Section tourId="form-basics" title="The basics" active={activeTourId === 'form-basics'}>
+            <div role="group" aria-labelledby={f('category')} className="flex flex-col gap-2">
+              <InfoLabel info={FIELD_HELP.category}>
+                <span id={f('category')} className="text-sm font-medium text-neutral-700">
+                  Category
+                </span>
+              </InfoLabel>
+              <div className="grid grid-cols-3 gap-2.5">
+                {CATEGORIES.map((c) => {
+                  const active = c === category
+                  return (
                     <button
-                      key={s.eventId}
+                      key={c}
                       type="button"
-                      onClick={() => setPortalEventId(s.eventId)}
-                      className="rounded-lg border border-neutral-200 px-2.5 py-1 text-left text-xs text-neutral-700 transition-colors hover:border-neutral-900 hover:bg-neutral-50"
+                      aria-pressed={active}
+                      onClick={() => pickCategory(c)}
+                      className={cn(
+                        'flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] transition-colors',
+                        active ? CATEGORY_STYLES[c].selected : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50',
+                      )}
                     >
-                      <span className="tabular-nums">{s.eventId}</span>
-                      {s.venue && <span className="text-neutral-500"> · {s.venue}</span>}
+                      <span className={cn('size-2 rounded-full', CATEGORY_STYLES[c].dot)} aria-hidden />
+                      {c}
                     </button>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
-            )}
-          </Field>
+            </div>
 
-          {match && (
-            <PortalSummary
-              match={match}
-              estimate={
-                canAdjust ? (
-                  <EstimateEditor
-                    idPrefix={id}
-                    match={match}
-                    value={adjustedTotal}
-                    reason={adjustmentReason}
-                    note={adjustmentNote}
-                    onValue={setAdjustedTotal}
-                    onReason={pickReason}
-                    onNote={setAdjustmentNote}
-                    onClear={clearAdjustment}
-                  />
-                ) : undefined
-              }
-            />
+            <Field label="Format" htmlFor={f('format')}>
+              <Select id={f('format')} value={format} onChange={pickFormat} options={FORMATS[category]} />
+            </Field>
+
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <Field label="Date" htmlFor={f('date')}>
+                <input id={f('date')} type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+                {dateMarkers.map((m) => (
+                  <p key={m.id} className={cn('text-xs', m.type === 'event' ? 'text-amber-700' : 'text-neutral-500')}>
+                    {m.label}
+                    {m.note && ` · ${m.note}`}
+                  </p>
+                ))}
+              </Field>
+              <Field label="Status" htmlFor={f('status')} info={FIELD_HELP.status}>
+                <Select id={f('status')} value={status} onChange={(v) => setStatus(v as Status)} options={STATUSES} labels={STATUS_OPTION_LABELS} />
+              </Field>
+              <Field label="Region" htmlFor={f('region')}>
+                <Select id={f('region')} value={region} onChange={(v) => setRegion(v as Region)} options={REGIONS} />
+              </Field>
+              <Field label="Organized by" htmlFor={f('organizedBy')} info={FIELD_HELP.organizedBy}>
+                <Select
+                  id={f('organizedBy')}
+                  value={organizedBy}
+                  onChange={(v) => setOrganizedBy(v as Organizer)}
+                  options={ORGANIZERS}
+                />
+              </Field>
+            </div>
+          </Section>
+
+          <Section tourId="form-where" title="Where" active={activeTourId === 'form-where'}>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <Field label="Venue" htmlFor={f('venue')}>
+                <input id={f('venue')} value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" maxLength={160} className={inputCls} />
+              </Field>
+              <Field label="Area" htmlFor={f('area')}>
+                <input id={f('area')} value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. Venice" maxLength={120} className={inputCls} />
+              </Field>
+            </div>
+          </Section>
+
+          <Section tourId="form-money" title="Money" active={activeTourId === 'form-money'}>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <Field label="Revenue type" htmlFor={f('revenueType')} info={FIELD_HELP.revenueType}>
+                <Select
+                  id={f('revenueType')}
+                  value={revenueType}
+                  onChange={(v) => setRevenueType(v as RevenueType)}
+                  options={REVENUE_TYPES}
+                />
+              </Field>
+              <Field label="Venue fee" htmlFor={f('venueFee')} optional info={FIELD_HELP.venueFee}>
+                <MoneyInput id={f('venueFee')} value={venueFee} onChange={setVenueFee} />
+              </Field>
+              {isFlat ? (
+                <Field label="Flat fee" htmlFor={f('flatFee')}>
+                  <MoneyInput id={f('flatFee')} value={flatFee} onChange={setFlatFee} />
+                </Field>
+              ) : (
+                <>
+                  <Field label="Tickets" htmlFor={f('tickets')}>
+                    <input
+                      id={f('tickets')}
+                      inputMode="numeric"
+                      value={tickets}
+                      placeholder="0"
+                      onChange={(e) => setTickets(e.target.value.replace(/\D/g, ''))}
+                      className={cn(inputCls, 'tabular-nums')}
+                    />
+                  </Field>
+                  <Field label="Ticket price" htmlFor={f('price')}>
+                    <MoneyInput id={f('price')} value={price} onChange={setPrice} />
+                  </Field>
+                </>
+              )}
+            </div>
+
+            {!isFlat && (
+              <Field
+                label="Expected revenue"
+                htmlFor={f('revenue')}
+                info={FIELD_HELP.expectedRevenue}
+                aside={
+                  revenueOverride != null ? (
+                    <button type="button" onClick={() => setRevenueOverride(null)} className="text-xs text-neutral-500 underline-offset-2 hover:underline">
+                      Reset to tickets times price
+                    </button>
+                  ) : (
+                    <span className="text-xs text-neutral-400">Tickets times price</span>
+                  )
+                }
+              >
+                <MoneyInput
+                  id={f('revenue')}
+                  value={revenueValue}
+                  onChange={(v) => setRevenueOverride(v === '' && computed == null ? null : v)}
+                />
+              </Field>
+            )}
+          </Section>
+
+          <Section
+            tourId="form-checklist"
+            title="Checklist"
+            hint="Tick these off as you prep."
+            active={activeTourId === 'form-checklist'}
+          >
+            <div className="flex flex-col gap-4">
+              <label className="flex items-start gap-3 text-[15px] text-neutral-700">
+                <input
+                  type="checkbox"
+                  checked={merchandised}
+                  onChange={(e) => setMerchandised(e.target.checked)}
+                  className="mt-0.5 size-5 rounded border-neutral-300 accent-neutral-900"
+                />
+                <span>
+                  Merchandised
+                  <span className="block text-xs text-neutral-500">{FIELD_HELP.merchandised}</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-[15px] text-neutral-700">
+                <input
+                  type="checkbox"
+                  checked={merch}
+                  onChange={(e) => setMerch(e.target.checked)}
+                  className="mt-0.5 size-5 rounded border-neutral-300 accent-neutral-900"
+                />
+                <span>
+                  Merch table at this show
+                  <span className="block text-xs text-neutral-500">{SYMBOL_HELP.merch}</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-[15px] text-neutral-700">
+                <input
+                  type="checkbox"
+                  checked={eventPlanner}
+                  onChange={(e) => setEventPlanner(e.target.checked)}
+                  className="mt-0.5 size-5 rounded border-neutral-300 accent-neutral-900"
+                />
+                <span>
+                  Event planner
+                  <span className="block text-xs text-neutral-500">{SYMBOL_HELP.eventPlanner}</span>
+                </span>
+              </label>
+            </div>
+          </Section>
+
+          <Section
+            tourId="form-portal"
+            title="From the portal"
+            hint="Live ticket sales and what we expect. Updates every hour."
+            active={activeTourId === 'form-portal'}
+          >
+            <Field label="Portal event ID" htmlFor={f('portal')} optional info={FIELD_HELP.portalId}>
+              <input id={f('portal')} value={portalEventId} onChange={(e) => setPortalEventId(e.target.value)} maxLength={120} className={inputCls} />
+              {wantSuggestions && suggestions && suggestions.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs text-neutral-400">Portal events on this date</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.eventId}
+                        type="button"
+                        onClick={() => setPortalEventId(s.eventId)}
+                        className="rounded-lg border border-neutral-200 px-2.5 py-1 text-left text-xs text-neutral-700 transition-colors hover:border-neutral-900 hover:bg-neutral-50"
+                      >
+                        <span className="tabular-nums">{s.eventId}</span>
+                        {s.venue && <span className="text-neutral-500"> · {s.venue}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Field>
+            {match ? (
+              <PortalSummary match={match} />
+            ) : (
+              <p className="text-sm text-neutral-500">
+                Once this show is linked to a portal event, its live ticket sales and our expected total show up here.
+              </p>
+            )}
+          </Section>
+
+          {match && canAdjust && (
+            <Section
+              tourId="form-estimate"
+              title="Your estimate"
+              hint="Know something the numbers don't? Enter your own total."
+              active={activeTourId === 'form-estimate'}
+            >
+              <EstimateEditor
+                idPrefix={id}
+                match={match}
+                value={adjustedTotal}
+                reason={adjustmentReason}
+                note={adjustmentNote}
+                onValue={setAdjustedTotal}
+                onReason={pickReason}
+                onNote={setAdjustmentNote}
+                onClear={clearAdjustment}
+              />
+            </Section>
           )}
 
-          <Field label="Notes" htmlFor={f('notes')} optional>
+          <Section tourId="form-marketing" title="Marketing" active={activeTourId === 'form-marketing'}>
+            <div className="flex flex-col gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <InfoLabel info={FIELD_HELP.decideBy}>
+                  <span className="font-medium text-neutral-700">Decide by</span>
+                </InfoLabel>
+                <p className="text-neutral-900">
+                  {decideBy
+                    ? `${formatDayShort(decideBy.date)} \u00b7 ${decideBySource(decideBy)}`
+                    : 'No date yet. It appears once an email or text is planned that could feature this show.'}
+                </p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <InfoLabel info={FIELD_HELP.featuredIn}>
+                  <span className="font-medium text-neutral-700">Featured in</span>
+                </InfoLabel>
+                <p className="text-neutral-900">
+                  {featuredIn.length > 0 ? featuredIn.join(', ') : 'Not in any planned email or text yet.'}
+                </p>
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            tourId="form-notes"
+            title="Notes"
+            hint="Anything the team should know. Optional."
+            active={activeTourId === 'form-notes'}
+          >
             <textarea
               id={f('notes')}
+              aria-label="Notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={4}
               maxLength={4000}
               className={cn(inputCls, 'h-auto resize-y py-3')}
             />
-          </Field>
+          </Section>
         </div>
+
+        {tourSteps && (
+          <div role="status" className="flex flex-col gap-3 border-t border-neutral-900 bg-neutral-900 px-6 py-4 text-white sm:px-8">
+            <p className="text-sm leading-relaxed">{tourSteps[tourIndex].text}</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-neutral-400">
+                Step {tourIndex + 1} of {tourSteps.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setTourSteps(null)}
+                className="ml-auto h-10 rounded-lg px-3 text-sm text-neutral-300 hover:text-white"
+              >
+                Skip
+              </button>
+              {tourIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTourIndex((i) => i - 1)}
+                  className="h-10 rounded-lg border border-neutral-600 px-4 text-sm font-medium hover:bg-neutral-800"
+                >
+                  Back
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => (tourIndex === tourSteps.length - 1 ? setTourSteps(null) : setTourIndex((i) => i + 1))}
+                className="h-10 rounded-lg bg-white px-4 text-sm font-semibold text-neutral-900 hover:bg-neutral-100"
+              >
+                {tourIndex === tourSteps.length - 1 ? 'Done' : 'Next'}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 border-t border-neutral-100 px-6 py-5 sm:px-8">
           {conflict && (

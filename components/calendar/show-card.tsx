@@ -1,5 +1,6 @@
-import { ClipboardList, ShoppingBag, SquareCheck } from 'lucide-react'
+import { ClipboardList, ShoppingBag } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SYMBOL_HELP, TAG_HELP } from '@/lib/glossary'
 import { formatLongDate } from '@/lib/dates'
 import { formatCurrency, statusLabel, type Show } from '@/lib/shows'
 import {
@@ -66,6 +67,7 @@ function Tag({ tag }: { tag: CardTag }) {
   return (
     <span
       data-tour={tag === 'Behind' || tag === 'Ahead' ? 'pace-tag' : undefined}
+      title={TAG_HELP[tag]}
       className={cn('shrink-0 whitespace-normal break-words rounded-sm px-1 text-[10px] font-semibold leading-tight', TAG_STYLES[tag])}
     >
       {tag}
@@ -86,7 +88,11 @@ function TicketsLine({
 }) {
   if (!hasTicketsLine(match, past)) return null
   if (past) {
-    return <span className={cn('mt-0.5 block text-[11px] leading-snug tabular-nums', className)}>{confirmedLabel(match)}</span>
+    return (
+      <span title="Tickets sold out of tickets available." className={cn('mt-0.5 block text-[11px] leading-snug tabular-nums', className)}>
+        {confirmedLabel(match)}
+      </span>
+    )
   }
 
   const projection = match.projection
@@ -97,7 +103,7 @@ function TicketsLine({
   const lowConfidence = adjusted == null && projection?.confidence === 'low'
 
   return (
-    <span className={cn('mt-1 block text-[11px] leading-snug tabular-nums', className)}>
+    <span title={SYMBOL_HELP.tickets} className={cn('mt-1 block text-[11px] leading-snug tabular-nums', className)}>
       {percent != null && (
         <span aria-hidden className="block h-1 w-full overflow-hidden rounded-full bg-current/15">
           <span className="block h-full rounded-full bg-current opacity-70" style={{ width: `${percent}%` }} />
@@ -108,7 +114,7 @@ function TicketsLine({
         {projected != null && (
           <span className={cn(lowConfidence && 'opacity-70')}>
             {match.hasEvent && ' → '}~{Math.round(projected)}
-            {adjusted != null && ' adj'}
+            {adjusted != null && <span title={SYMBOL_HELP.adjusted}> adj</span>}
           </span>
         )}
       </span>
@@ -122,15 +128,25 @@ const ESTIMATE = 'opacity-60'
 function MoneyLine({ money, className, tentative = false }: { money: CardMoney; className: string; tentative?: boolean }) {
   return (
     <span className={cn('mt-0.5 flex flex-wrap items-baseline gap-x-1 text-[11px] leading-snug tabular-nums', className, tentative && 'italic text-neutral-500')}>
-      {tentative && <span>~</span>}
-      {money.kind === 'actual' && <span>{formatCurrency(money.amount)}</span>}
-      {money.kind === 'flat' && <span>{formatCurrency(money.amount)} flat fee</span>}
-      {money.kind === 'plan' && <span className={tentative ? undefined : ESTIMATE}>{!tentative && '~'}{formatCurrency(money.amount)} plan</span>}
+      {tentative && <span title={SYMBOL_HELP.estimate}>~</span>}
+      {money.kind === 'actual' && <span title={SYMBOL_HELP.alreadyIn}>{formatCurrency(money.amount)}</span>}
+      {money.kind === 'flat' && <span title={SYMBOL_HELP.flatFee}>{formatCurrency(money.amount)} flat fee</span>}
+      {money.kind === 'plan' && (
+        <span title={SYMBOL_HELP.plan} className={tentative ? undefined : ESTIMATE}>
+          {!tentative && '~'}
+          {formatCurrency(money.amount)} plan
+        </span>
+      )}
       {money.kind === 'linked' && (
         <>
-          {money.sold != null && <span>{formatCurrency(money.sold)} in</span>}
+          {money.sold != null && <span title={SYMBOL_HELP.alreadyIn}>{formatCurrency(money.sold)} in</span>}
           {money.sold != null && money.projected > 0 && <span className={tentative ? undefined : ESTIMATE}>·</span>}
-          {money.projected > 0 && <span className={tentative ? undefined : ESTIMATE}>{!tentative && '~'}{formatCurrency(money.projected)} proj</span>}
+          {money.projected > 0 && (
+            <span title={SYMBOL_HELP.expected} className={tentative ? undefined : ESTIMATE}>
+              {!tentative && '~'}
+              {formatCurrency(money.projected)} proj
+            </span>
+          )}
         </>
       )}
     </span>
@@ -266,7 +282,10 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
       }
     >
       {tentative && (
-        <span className="mb-1 inline-block rounded-sm bg-[#EFEAE0] px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-[#6F685D]">
+        <span
+          title={show.status === 'Idea' ? SYMBOL_HELP.Idea : SYMBOL_HELP.Tentative}
+          className="mb-1 inline-block rounded-sm bg-[#EFEAE0] px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-[#6F685D]"
+        >
           {show.status}
         </span>
       )}
@@ -280,28 +299,24 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
           {show.region !== 'LA' && <span className="text-[11px] opacity-75"> · {show.region}</span>}
         </span>
         {show.merch && (
-          <span className="shrink-0" title="Merch">
+          <span className="shrink-0" title={SYMBOL_HELP.merch}>
             <ShoppingBag className="size-3" aria-hidden />
-            <span className="sr-only">Merch</span>
+            <span className="sr-only">Merch table</span>
           </span>
         )}
         {show.eventPlanner && (
-          <span className="shrink-0" title="Event planner">
+          <span className="shrink-0" title={SYMBOL_HELP.eventPlanner}>
             <ClipboardList className="size-3" aria-hidden />
             <span className="sr-only">Event planner</span>
-          </span>
-        )}
-        {show.merchandised && (
-          <span className="shrink-0" title="Merchandised">
-            <SquareCheck className="size-3" aria-hidden />
-            <span className="sr-only">Merchandised</span>
           </span>
         )}
       </span>
       {!flat && !local && match && <TicketsLine show={show} match={match} past={past} className={styles.sub} />}
       {money && <MoneyLine money={money} className={tentative ? 'text-[#6F685D]' : styles.sub} tentative={tentative} />}
       {isUpcoming(show.date) && !show.merchandised && (
-        <span className="mt-1 block text-[10px] leading-snug text-neutral-500">Not Merchandised</span>
+        <span title={SYMBOL_HELP.notMerchandised} className="mt-1 block text-[10px] leading-snug text-neutral-500">
+          Not merchandised
+        </span>
       )}
       {tag && (
         <span className={cn('mt-1 flex justify-end', styles.sub)}>

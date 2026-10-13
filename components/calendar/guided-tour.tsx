@@ -3,9 +3,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { driver, type Driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
-import { TOUR_STEPS } from '@/lib/tour'
+import { SHOW_FORM_STEPS, TOUR_STEPS, type TourStep } from '@/lib/tour'
 
 const SEEN_KEY = 'show-planner:tour-seen'
+const SHOW_SEEN_KEY = 'show-planner:show-tour-seen'
+const SHOW_SEEN_COOKIE = 'show_tour_seen'
+
+export function hasSeenShowTour() {
+  try {
+    if (window.localStorage.getItem(SHOW_SEEN_KEY) === '1') return true
+  } catch {
+    return true
+  }
+  return document.cookie.split('; ').some((part) => part === `${SHOW_SEEN_COOKIE}=1`)
+}
+
+export function markShowTourSeen() {
+  try {
+    window.localStorage.setItem(SHOW_SEEN_KEY, '1')
+  } catch {
+    // The cookie below still remembers it.
+  }
+  document.cookie = `${SHOW_SEEN_COOKIE}=1; path=/; max-age=${60 * 60 * 24 * 365 * 5}; samesite=lax`
+}
 
 export function hasSeenTour() {
   try {
@@ -33,9 +53,15 @@ function firstVisible(selector: string) {
   return null
 }
 
-function TourCards({ texts, onClose }: { texts: string[]; onClose: () => void }) {
+type CardSet = { texts: string[]; targets: HTMLElement[] }
+
+function TourCards({ texts, targets, onClose }: CardSet & { onClose: () => void }) {
   const [index, setIndex] = useState(0)
   const last = index === texts.length - 1
+
+  useEffect(() => {
+    targets[index]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [index, targets])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -46,8 +72,8 @@ function TourCards({ texts, onClose }: { texts: string[]; onClose: () => void })
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-neutral-900/50 p-4">
-      <div role="dialog" aria-modal="true" aria-label="Tour" className="flex w-full flex-col gap-4 rounded-2xl bg-white p-5 shadow-2xl">
+    <div className="pointer-events-none fixed inset-0 z-[60] flex items-end bg-neutral-900/30 p-4">
+      <div role="dialog" aria-label="Tour" className="pointer-events-auto flex w-full flex-col gap-4 rounded-2xl bg-white p-5 shadow-2xl">
         <p className="text-xs font-medium text-neutral-500">
           Step {index + 1} of {texts.length}
         </p>
@@ -87,19 +113,19 @@ function TourCards({ texts, onClose }: { texts: string[]; onClose: () => void })
 
 export function useGuidedTour() {
   const driverRef = useRef<Driver | null>(null)
-  const [cards, setCards] = useState<string[] | null>(null)
+  const [cards, setCards] = useState<CardSet | null>(null)
 
-  const start = useCallback(() => {
-    markTourSeen()
+  const run = useCallback((steps: TourStep[], onSeen: () => void) => {
+    onSeen()
     driverRef.current?.destroy()
 
-    const available = TOUR_STEPS.map((step) => ({ step, element: firstVisible(step.selector) })).filter(
-      (entry): entry is { step: (typeof TOUR_STEPS)[number]; element: HTMLElement } => entry.element !== null,
-    )
+    const available = steps
+      .map((step) => ({ step, element: firstVisible(step.selector) }))
+      .filter((entry): entry is { step: TourStep; element: HTMLElement } => entry.element !== null)
     if (available.length === 0) return
 
     if (window.matchMedia('(max-width: 767px)').matches) {
-      setCards(available.map(({ step }) => step.text))
+      setCards({ texts: available.map(({ step }) => step.text), targets: available.map(({ element }) => element) })
       return
     }
 
@@ -130,10 +156,12 @@ export function useGuidedTour() {
     tour.drive()
   }, [])
 
+  const start = useCallback(() => run(TOUR_STEPS, markTourSeen), [run])
+
   useEffect(() => () => driverRef.current?.destroy(), [])
 
   const closeCards = useCallback(() => setCards(null), [])
-  const ui = cards ? <TourCards texts={cards} onClose={closeCards} /> : null
+  const ui = cards ? <TourCards texts={cards.texts} targets={cards.targets} onClose={closeCards} /> : null
 
   return { start, ui }
 }

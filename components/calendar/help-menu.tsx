@@ -7,10 +7,12 @@ const menuItem =
 
 export function HelpMenu({
   onTour,
+  onShowTour,
   onFaq,
   onImport,
 }: {
   onTour: () => void
+  onShowTour: () => void
   onFaq: () => void
   onImport?: () => void
 }) {
@@ -59,6 +61,9 @@ export function HelpMenu({
         >
           <button type="button" role="menuitem" autoFocus onClick={() => choose(onTour)} className={menuItem}>
             Take the tour
+          </button>
+          <button type="button" role="menuitem" onClick={() => choose(onShowTour)} className={menuItem}>
+            Tour of a show
           </button>
           <button type="button" role="menuitem" onClick={() => choose(onFaq)} className={menuItem}>
             FAQ
