@@ -130,10 +130,11 @@ export function MonthGrid({
                   !lastRow && 'border-b border-neutral-300/70',
                 )}
               >
-                <MarkerBanners markers={markerMap.get(cell.iso)} />
-                <SendChips sends={sendMap.get(cell.iso)} onOpen={onOpenSend} />
-                <div className="flex items-center justify-between">
-                  <DayNumber day={cell.day} isToday={isToday} />
+                <div className="flex min-h-7 items-start justify-between gap-1">
+                  <div className="flex min-w-0 items-start gap-1">
+                    <DayNumber day={cell.day} isToday={isToday} />
+                    <MarkerBanners markers={markerMap.get(cell.iso)} />
+                  </div>
                   <button
                     type="button"
                     onClick={(e) => {
@@ -143,11 +144,12 @@ export function MonthGrid({
                     aria-label={`Add to ${formatLongDate(cell.iso)}`}
                     aria-haspopup="menu"
                     aria-expanded={menuDate === cell.iso}
-                    className="inline-flex size-6 items-center justify-center rounded-md text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-200/60 hover:text-neutral-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 group-hover:opacity-100"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-200/60 hover:text-neutral-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 group-hover:opacity-100"
                   >
                     <Plus className="size-4" aria-hidden />
                   </button>
                 </div>
+                <SendChips sends={sendMap.get(cell.iso)} onOpen={onOpenSend} />
                 {menuDate === cell.iso && (
                   <div
                     role="menu"

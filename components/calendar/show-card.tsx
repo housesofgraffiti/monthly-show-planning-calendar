@@ -255,6 +255,7 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
   const money = cardMoney(show, match, past)
   const tag = pickTag(match, past, flat, local)
   const venueName = show.venue || show.area || 'Venue TBD'
+  const formatName = show.format.includes(':') ? show.format.slice(show.format.indexOf(':') + 1).trim() : show.format
 
   return (
     <button
@@ -292,12 +293,9 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
       <span className={cn('block whitespace-normal break-words text-sm leading-snug', tentative ? 'font-normal text-[#6F685D]' : 'font-semibold', !show.venue && 'opacity-60')}>
         {venueName}
       </span>
-      <span className={cn('flex items-center gap-1.5 text-xs leading-snug', tentative ? 'text-[#6F685D]' : styles.sub)}>
-        <span className={cn('size-2 shrink-0 rounded-full', tentative ? 'border-[1.5px] border-current bg-transparent' : styles.dot)} aria-hidden />
-        <span className="min-w-0 whitespace-normal break-words">
-          {show.format}
-          {show.region !== 'LA' && <span className="text-[11px] opacity-75"> · {show.region}</span>}
-        </span>
+      <span className={cn('flex items-start gap-1.5 text-xs leading-snug', tentative ? 'text-[#6F685D]' : styles.sub)}>
+        <span className={cn('mt-1 size-2 shrink-0 rounded-full', tentative ? 'border-[1.5px] border-current bg-transparent' : styles.dot)} aria-hidden />
+        <span className="min-w-0 whitespace-normal break-words">{formatName}</span>
         {show.merch && (
           <span className="shrink-0" title={SYMBOL_HELP.merch}>
             <ShoppingBag className="size-3" aria-hidden />
@@ -313,15 +311,24 @@ export function ShowCard({ show, onOpen, match, past = false, emphasis, decideBy
       </span>
       {!flat && !local && match && <TicketsLine show={show} match={match} past={past} className={styles.sub} />}
       {money && <MoneyLine money={money} className={tentative ? 'text-[#6F685D]' : styles.sub} tentative={tentative} />}
-      {isUpcoming(show.date) && !show.merchandised && (
-        <span title={SYMBOL_HELP.notMerchandised} className="mt-1 block text-[10px] leading-snug text-neutral-500">
-          Not merchandised
-        </span>
-      )}
-      {tag && (
-        <span className={cn('mt-1 flex justify-end', styles.sub)}>
-          <Tag tag={tag} />
-        </span>
+      {((isUpcoming(show.date) && !show.merchandised && !local) || tag || show.region !== 'LA') && (
+        <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
+          {isUpcoming(show.date) && !show.merchandised && !local ? (
+            <span title={SYMBOL_HELP.notMerchandised} className="min-w-0 truncate text-[10px] leading-snug text-neutral-500">
+              Not merchandised
+            </span>
+          ) : (
+            <span />
+          )}
+          <span className={cn('flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1', styles.sub)}>
+            {show.region !== 'LA' && (
+              <span className="rounded-sm bg-neutral-100 px-1 text-[10px] font-medium leading-tight text-neutral-500">
+                {show.region}
+              </span>
+            )}
+            {tag && <Tag tag={tag} />}
+          </span>
+        </div>
       )}
       <HoverPreview show={show} match={match} past={past} decideBy={decideBy} align={previewAlign} />
     </button>

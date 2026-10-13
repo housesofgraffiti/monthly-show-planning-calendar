@@ -5,7 +5,7 @@ import type { DayMarker } from '@/lib/markers'
 export function MarkerBanners({ markers }: { markers: DayMarker[] | undefined }) {
   if (!markers?.length) return null
   return (
-    <div data-tour="day-marker" className="flex flex-col gap-0.5">
+    <div data-tour="day-marker" className="flex min-w-0 flex-col gap-0.5 pt-0.5">
       {markers.map((m) => (
         <span
           key={m.id}
