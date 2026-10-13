@@ -10,7 +10,8 @@ import type { DayMarkerInput } from '@/lib/markers'
 import { decideByFor, decisionsThisWeek, featuredInNames, type Send, type SendInput } from '@/lib/sends'
 import { portalFor, type ImportResult } from '@/lib/portal'
 import { planningSummary, typicalDiscovery, type MixKey } from '@/lib/planning'
-import { CalendarHeader, Legend } from './calendar-header'
+import { CalendarHeader } from './calendar-header'
+import { CalendarToolbar } from './calendar-toolbar'
 import { DecisionsThisWeek } from './decisions-this-week'
 import { FaqPanel } from './faq-panel'
 import { hasSeenTour, useGuidedTour } from './guided-tour'
@@ -25,7 +26,7 @@ import { SummaryBar } from './summary-bar'
 import { TableView } from './table-view'
 import { VenuesPlaceholder } from './venues-placeholder'
 
-type Editor = { show?: Show; date: string; key: number }
+type Editor = { show?: Show; date: string; key: number; autoTour?: boolean }
 type SendEditor = { send?: Send; date: string; key: number }
 type View = 'calendar' | 'table' | 'venues'
 
@@ -52,6 +53,7 @@ export function ShowCalendar({
   const [editingMarkers, setEditingMarkers] = useState(false)
   const [sendEditor, setSendEditor] = useState<SendEditor | null>(null)
   const [showSends, setShowSends] = useState(true)
+  const [showMarkers, setShowMarkers] = useState(true)
   const [importMessage, setImportMessage] = useState<string | null>(null)
   const [faqOpen, setFaqOpen] = useState(false)
   const { start: startTour, ui: tourUi } = useGuidedTour()
@@ -112,7 +114,12 @@ export function ShowCalendar({
     window.localStorage.setItem('calendar-region', next)
   }
 
+  const flash = (message: string) => {
+    setImportMessage(message)
+    window.setTimeout(() => setImportMessage(null), 6000)
+  }
   const openAdd = (date: string) => setEditor({ date, key: Date.now() })
+  const openShowTour = () => setEditor({ date: ym === thisMonth ? todayISO : `${ym}-01`, key: Date.now(), autoTour: true })
   const openAddSend = (date: string) => setSendEditor({ date, key: Date.now() })
   const openSend = (send: Send) => setSendEditor({ send, date: send.date, key: Date.now() })
   const openEdit = (show: Show) => setEditor({ show, date: show.date, key: Date.now() })
@@ -123,6 +130,7 @@ export function ShowCalendar({
     setEditor(null)
     await mutate()
     announceChange()
+    flash('Saved. Everyone can see this now.')
     return result
   }
 
@@ -194,8 +202,7 @@ export function ShowCalendar({
     setImporting(false)
     const parts = [`Imported ${result.created}`, `linked ${result.linked}`]
     if (result.skipped > 0) parts.push(`skipped ${result.skipped}`)
-    setImportMessage(parts.join(', '))
-    window.setTimeout(() => setImportMessage(null), 6000)
+    flash(parts.join(', '))
     await mutate()
     announceChange()
   }
@@ -227,6 +234,7 @@ export function ShowCalendar({
         onRegionChange={changeRegion}
         viewers={viewers}
         onTour={startTour}
+        onShowTour={openShowTour}
         onFaq={() => setFaqOpen(true)}
         onViewChange={(next) => {
           setView(next)
@@ -255,10 +263,11 @@ export function ShowCalendar({
       <div className="flex flex-col gap-4">
         {view === 'calendar' && <DecisionsThisWeek decisions={decisions} portal={portal} onOpen={openEdit} />}
         {view === 'calendar' && (
-          <Legend
-            syncing={isValidating}
+          <CalendarToolbar
             portalSyncedAt={data?.portalSyncedAt}
             onMarkers={() => setEditingMarkers(true)}
+            showMarkers={showMarkers}
+            onToggleMarkers={() => setShowMarkers((on) => !on)}
             showSends={showSends}
             onToggleSends={() => setShowSends((on) => !on)}
             onSynced={mode === 'remote' ? () => void mutate() : undefined}
@@ -275,7 +284,7 @@ export function ShowCalendar({
             todayISO={todayISO}
             shows={visibleShows}
             portal={portal}
-            markers={markers ?? []}
+            markers={showMarkers ? (markers ?? []) : []}
             sends={sends}
             showSends={showSends}
             highlight={highlight}
@@ -302,6 +311,7 @@ export function ShowCalendar({
           getSuggestions={source.getPortalSuggestions}
           getMarkers={source.getMarkers}
           editorName={firstName ?? ''}
+          autoTour={editor.autoTour}
           onClose={() => setEditor(null)}
           onReload={editor.show ? handleReload : undefined}
           onSave={handleSave}

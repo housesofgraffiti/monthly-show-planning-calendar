@@ -17,7 +17,7 @@ async function fetchStatus(url: string): Promise<{ syncedAt: string | null }> {
   return res.json()
 }
 
-export function SyncNowButton({ onSynced }: { onSynced?: () => void }) {
+export function SyncNowButton({ onSynced, className }: { onSynced?: () => void; className?: string }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -73,7 +73,7 @@ export function SyncNowButton({ onSynced }: { onSynced?: () => void }) {
         type="button"
         onClick={press}
         disabled={pending || syncing}
-        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-0.5 text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+        className={`inline-flex items-center gap-1.5 border border-neutral-200 text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 disabled:cursor-not-allowed disabled:opacity-60 ${className ?? 'rounded-md px-2 py-0.5'}`}
       >
         <RefreshCw className={`size-3.5 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden />
         {syncing ? 'Syncing...' : 'Sync now'}
