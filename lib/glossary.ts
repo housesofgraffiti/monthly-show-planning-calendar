@@ -1,5 +1,6 @@
 // One-line plain-language explanations, reused by the Key, card tooltips and the "i" icons in the show form.
 export const TAG_HELP = {
+  'Sold out': 'Tickets sold have reached the available capacity.',
   'Sellout likely': 'Sales are on pace to fill nearly every ticket.',
   Behind: 'Selling slower than most past shows at this point.',
   Ahead: 'Selling faster than most past shows at this point.',

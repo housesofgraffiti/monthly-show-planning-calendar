@@ -28,18 +28,22 @@ type Props = {
   previewAlign?: 'left' | 'right'
 }
 
-type CardTag = 'Sellout likely' | 'Behind' | 'Ahead' | 'LP'
+type CardTag = 'Sold out' | 'Sellout likely' | 'Behind' | 'Ahead' | 'LP'
 
 const TAG_STYLES: Record<CardTag, string> = {
+  'Sold out': 'bg-emerald-100 text-emerald-700',
   'Sellout likely': 'bg-amber-100 text-amber-800',
   Behind: 'bg-red-100 text-red-700',
   Ahead: 'bg-emerald-100 text-emerald-700',
   LP: 'bg-neutral-900/10 text-neutral-700',
 }
 
-// One tag per card, in priority order: Sellout likely, Behind, Ahead, LP.
+// One tag per card, in priority order: Sold out, Sellout likely, Behind, Ahead, LP.
 function pickTag(match: PortalMatch | undefined, past: boolean, flat: boolean, local: boolean): CardTag | null {
   const projection = match?.projection
+  if (!past && !flat && !local && match?.ticketsAvailable != null && (confirmedTotal(match) ?? 0) >= match.ticketsAvailable) {
+    return 'Sold out'
+  }
   if (!past && !flat && !local && projection) {
     if (projection.selloutLikely) return 'Sellout likely'
     const pace = paceTag(projection.paceLabel)
@@ -100,6 +104,7 @@ function TicketsLine({
   const projected = adjusted ?? (projection ? projectedTotal(projection) : null)
   const capacity = match.ticketsAvailable
   const percent = capacity ? Math.min(100, Math.round(((confirmedTotal(match) ?? 0) / capacity) * 100)) : null
+  const soldOut = capacity != null && (confirmedTotal(match) ?? 0) >= capacity
   const lowConfidence = adjusted == null && projection?.confidence === 'low'
 
   return (
@@ -111,7 +116,7 @@ function TicketsLine({
       )}
       <span className="mt-0.5 block whitespace-normal break-words">
         {match.hasEvent && confirmedLabel(match)}
-        {projected != null && (
+        {!soldOut && projected != null && (
           <span className={cn(lowConfidence && 'opacity-70')}>
             {match.hasEvent && ' → '}~{Math.round(projected)}
             {adjusted != null && <span title={SYMBOL_HELP.adjusted}> adj</span>}
